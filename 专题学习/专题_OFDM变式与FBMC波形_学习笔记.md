@@ -60,7 +60,7 @@ $$
 加入循环前缀（Cyclic Prefix, CP）后：
 
 $$
-x_l[n]=s_l[(n-N_{\rm CP})\bmod N],\quad 0\le n<N+N_{\rm CP}.
+x_l[n]=s_l[(n-N_{\mathrm{CP}})\bmod N],\quad 0\le n<N+N_{\mathrm{CP}}.
 $$
 
 CP 的作用是把信道线性卷积近似转化为循环卷积。若信道长度不超过 CP，则频域上有
@@ -80,7 +80,7 @@ $$
 CP-OFDM 的符号时间窗接近矩形窗：
 
 $$
-p_{\rm rect}(t)=
+p_{\mathrm{rect}}(t)=
 \begin{cases}
 1, & 0\le t<T,\\
 0, & \text{otherwise}.
@@ -90,7 +90,7 @@ $$
 矩形窗的频域响应是 sinc 形：
 
 $$
-P_{\rm rect}(f)\propto \frac{\sin(\pi fT)}{\pi fT}.
+P_{\mathrm{rect}}(f)\propto \frac{\sin(\pi fT)}{\pi fT}.
 $$
 
 sinc 旁瓣衰减较慢，因此 CP-OFDM 的带外泄漏（Out-of-Band Emission, OOB）较高。
@@ -106,13 +106,13 @@ W-OFDM 的核心是：**把 OFDM 符号边缘从硬截断变成平滑过渡**。
 普通 CP-OFDM 可以理解为
 
 $$
-x[n]=s^{\rm CP}[n]w_{\rm rect}[n].
+x[n]=s^{\mathrm{CP}}[n]w_{\mathrm{rect}}[n].
 $$
 
 W-OFDM 改为
 
 $$
-x^{\rm W}[n]=s^{\rm CP}[n]w[n],
+x^{\mathrm{W}}[n]=s^{\mathrm{CP}}[n]w[n],
 $$
 
 其中 $w[n]$ 是平滑窗，例如升余弦窗。
@@ -122,11 +122,11 @@ $$
 $$
 w[n]=
 \begin{cases}
-\frac{1}{2}\left[1-\cos\left(\frac{\pi n}{N_{\rm roll}}\right)\right],
-&0\le n<N_{\rm roll},\\[4pt]
-1,&N_{\rm roll}\le n<N_{\rm sym}-N_{\rm roll},\\[4pt]
-\frac{1}{2}\left[1-\cos\left(\frac{\pi (N_{\rm sym}-n)}{N_{\rm roll}}\right)\right],
-&N_{\rm sym}-N_{\rm roll}\le n<N_{\rm sym}.
+\frac{1}{2}\left[1-\cos\left(\frac{\pi n}{N_{\mathrm{roll}}}\right)\right],
+&0\le n<N_{\mathrm{roll}},\\[4pt]
+1,&N_{\mathrm{roll}}\le n<N_{\mathrm{sym}}-N_{\mathrm{roll}},\\[4pt]
+\frac{1}{2}\left[1-\cos\left(\frac{\pi (N_{\mathrm{sym}}-n)}{N_{\mathrm{roll}}}\right)\right],
+&N_{\mathrm{sym}}-N_{\mathrm{roll}}\le n<N_{\mathrm{sym}}.
 \end{cases}
 $$
 
@@ -135,7 +135,7 @@ $$
 时域乘窗对应频域卷积：
 
 $$
-X^{\rm W}(f)=X^{\rm OFDM}(f)*W(f).
+X^{\mathrm{W}}(f)=X^{\mathrm{OFDM}}(f)*W(f).
 $$
 
 平滑窗比矩形窗边缘连续性更好，因此频域旁瓣更低。直观上：
@@ -146,16 +146,16 @@ $$
 
 ### 3.3 代价
 
-窗函数滚降区会占用保护时间。若滚降长度为 $N_{\rm roll}$，有效 CP 大致变成
+窗函数滚降区会占用保护时间。若滚降长度为 $N_{\mathrm{roll}}$，有效 CP 大致变成
 
 $$
-N_{\rm CP,eff}=N_{\rm CP}-N_{\rm roll}.
+N_{\mathrm{CP},eff}=N_{\mathrm{CP}}-N_{\mathrm{roll}}.
 $$
 
 为了避免严重符号间干扰（Inter-Symbol Interference, ISI），需要
 
 $$
-N_{\rm CP,eff}\ge L_h-1,
+N_{\mathrm{CP},eff}\ge L_h-1,
 $$
 
 其中 $L_h$ 是信道长度。因此 W-OFDM 的折中是：
@@ -172,28 +172,28 @@ $$
 
 F-OFDM 的核心是：**先生成 OFDM 信号，再对整个子带或整带信号进行滤波**。
 
-若 CP-OFDM 信号为 $x^{\rm CP}[n]$，则 F-OFDM 为
+若 CP-OFDM 信号为 $x^{\mathrm{CP}}[n]$，则 F-OFDM 为
 
 $$
-x^{\rm F}[n]=x^{\rm CP}[n]*g[n],
+x^{\mathrm{F}}[n]=x^{\mathrm{CP}}[n]*g[n],
 $$
 
 其中 $g[n]$ 是 FIR 滤波器。频域上为
 
 $$
-X^{\rm F}(f)=X^{\rm CP}(f)G(f).
+X^{\mathrm{F}}(f)=X^{\mathrm{CP}}(f)G(f).
 $$
 
 如果普通 OFDM 的频域信号写成
 
 $$
-X_{\rm OFDM}(f)=\sum_{k\in\mathcal K}X_kQ(f-k\Delta f),
+X_{\mathrm{OFDM}}(f)=\sum_{k\in\mathcal K}X_kQ(f-k\Delta f),
 $$
 
 其中 $Q(f)$ 是矩形窗导致的 sinc 频谱，那么 F-OFDM 后变为
 
 $$
-X_{\rm F}(f)=G(f)\sum_{k\in\mathcal K}X_kQ(f-k\Delta f).
+X_{\mathrm{F}}(f)=G(f)\sum_{k\in\mathcal K}X_kQ(f-k\Delta f).
 $$
 
 从单个子载波看，好像是
@@ -299,13 +299,13 @@ $$
 对子带组滤波：
 
 $$
-x_b^{\rm F}[n]=s_b[n]*g_b[n].
+x_b^{\mathrm{F}}[n]=s_b[n]*g_b[n].
 $$
 
 最终所有子带组通过同一个基带链路和射频前端同时发射，因此时域叠加：
 
 $$
-x[n]=\sum_{b=1}^{B}x_b^{\rm F}[n].
+x[n]=\sum_{b=1}^{B}x_b^{\mathrm{F}}[n].
 $$
 
 这来自线性叠加原理：多个频带上的信号同时发射，最终在时域上就是相加。
@@ -363,7 +363,7 @@ $$
 OFDM 其实也可以看成这样，只不过 OFDM 的原型滤波器是矩形窗：
 
 $$
-g_k^{\rm OFDM}[n]=p_{\rm rect}[n]e^{j2\pi kn/N}.
+g_k^{\mathrm{OFDM}}[n]=p_{\mathrm{rect}}[n]e^{j2\pi kn/N}.
 $$
 
 FBMC 的区别在于：它用一个更长、更平滑、频域局部化更好的 $p[n]$ 替代矩形窗。
@@ -506,7 +506,7 @@ $$
 F-OFDM：
 
 $$
-X_{\rm F}(f)=G(f)\sum_k X_kQ(f-k\Delta f).
+X_{\mathrm{F}}(f)=G(f)\sum_k X_kQ(f-k\Delta f).
 $$
 
 即：先生成 OFDM 信号，再整体/子带滤波。
@@ -514,7 +514,7 @@ $$
 FBMC：
 
 $$
-X_{\rm FBMC}(f)=\sum_k d_kP(f-k\Delta f).
+X_{\mathrm{FBMC}}(f)=\sum_k d_kP(f-k\Delta f).
 $$
 
 即：每个子载波本身就是一个频移后的滤波器分支。
@@ -539,20 +539,20 @@ OOB 指信号泄漏到被分配频带之外的能量，而不是子载波间频�
 若分配频带为
 
 $$
-\mathcal B_{\rm alloc}=[f_1,f_2],
+\mathcal B_{\mathrm{alloc}}=[f_1,f_2],
 $$
 
 则带外泄漏功率可写为
 
 $$
-P_{\rm OOB}=\int_{f\notin\mathcal B_{\rm alloc}}S_x(f)df.
+P_{\mathrm{OOB}}=\int_{f\notin\mathcal B_{\mathrm{alloc}}}S_x(f)df.
 $$
 
 归一化 OOB 可写为
 
 $$
-\eta_{\rm OOB}
-=\frac{\int_{f\notin\mathcal B_{\rm alloc}}S_x(f)df}
+\eta_{\mathrm{OOB}}
+=\frac{\int_{f\notin\mathcal B_{\mathrm{alloc}}}S_x(f)df}
 {\int_{-\infty}^{+\infty}S_x(f)df}.
 $$
 
@@ -567,7 +567,7 @@ OFDM 子载波之间本来就是 sinc 频谱重叠的，只要正交条件成立
 可用泄漏指标描述：
 
 $$
-\eta_{k,\rm leak}
+\eta_{k,\mathrm{leak}}
 =\frac{\int_{f\notin\mathcal B_k}|G_k(f)|^2df}
 {\int_{-\infty}^{+\infty}|G_k(f)|^2df}.
 $$
@@ -629,13 +629,13 @@ $$
 CP-OFDM 的时间利用率为
 
 $$
-\eta_{\rm CP}=\frac{N}{N+N_{\rm CP}}.
+\eta_{\mathrm{CP}}=\frac{N}{N+N_{\mathrm{CP}}}.
 $$
 
 FBMC 通常不需要 CP，因此长连续传输中资源效率更高：
 
 $$
-\eta_{\rm FBMC}\approx 1.
+\eta_{\mathrm{FBMC}}\approx 1.
 $$
 
 但 FBMC 的滤波器很长，短包传输有启动和结束滤波器过渡开销，因此短包场景下未必占优。
@@ -661,7 +661,7 @@ $$
 归一化多普勒可写为
 
 $$
-\nu=f_DT_{\rm sym}.
+\nu=f_DT_{\mathrm{sym}}.
 $$
 
 $\nu$ 越大，一个符号内信道变化越明显，正交性越容易被破坏。
@@ -707,7 +707,7 @@ $$
 增加 FIR 滤波：
 
 $$
-x^{\rm F}[n]=x[n]*g[n].
+x^{\mathrm{F}}[n]=x[n]*g[n].
 $$
 
 若直接卷积，复杂度约为
@@ -723,7 +723,7 @@ $$
 需要多个子带组分别处理：
 
 $$
-x^{\rm UF}[n]=\sum_{b=1}^{B}s_b[n]*g_b[n].
+x^{\mathrm{UF}}[n]=\sum_{b=1}^{B}s_b[n]*g_b[n].
 $$
 
 复杂度来自多个子带分支、子带滤波、接收端长 FFT 和更复杂均衡。
