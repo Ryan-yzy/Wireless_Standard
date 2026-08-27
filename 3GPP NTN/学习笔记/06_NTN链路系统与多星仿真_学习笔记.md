@@ -1,38 +1,30 @@
 ---
-title: "TR 38.821 卫星波束与链路/系统级仿真"
-subtitle: "卫星波束理论、单星链路/系统级与多星网络评估"
-author: "NTN 学习笔记"
-date: "2026-08-12 · v7"
+title: "NTN 链路系统与多星仿真学习笔记"
+date: "2026-08-26"
+updated: "2026-08-26"
+sources:
+  - "3GPP TR 38.811 V15.4.0"
+  - "3GPP TR 38.821 V16.2.0"
 ---
 
-```{=latex}
-\vspace{0.35cm}
-```
+# NTN 链路系统与多星仿真学习笔记
 
-> 标准基线：3GPP TR 38.821 V16.2.0、3GPP TR 38.811 V15.4.0  
-> 内容主线：卫星波束理论 \(\rightarrow\) 单星链路仿真 \(\rightarrow\) 单星系统级仿真 \(\rightarrow\) 多星仿真
+> 本笔记把前五篇输出装配为链路级、单星系统级和多星系统级仿真，明确离线曲线、在线几何、信道状态、调度状态和统计输出的边界。
 
-TR 38.821 Clause 6.1 建立 NTN 物理层和网络性能评估框架：Clause 6.1.1 为系统级仿真，6.1.2 为链路级仿真，6.1.3 为链路预算，6.1.4 扩展到多卫星覆盖与干扰。
+| 主章节 | 核心对象 | 主要来源 |
+|---|---|---|
+| 仿真接口 | 几何、波束、信道、协议状态 | 前五篇 |
+| 链路级 | 波形、同步、接入、BLER | TR 38.821 Clause 6 |
+| 单星系统级 | drop、调度、干扰、吞吐 | TR 38.821 Clause 6 |
+| 多星 | 可见性、选择、切换和星间干扰 | 工程建模 |
 
-本文从卫星波束的几何与方向图出发，再分别说明单星链路级仿真（Link-Level Simulation，LLS）、单星系统级仿真（System-Level Simulation，SLS）和多星 SLS。四部分依次回答：波束如何指向地面、单条物理链路能否同步与解码、单星多波束网络能提供多少吞吐量，以及多颗卫星共同可见时如何处理覆盖、切换和星间干扰。
+## 0 仿真范围、公共输入与评估方法
 
-| 层次 | 最小研究对象 | 主要输入 | 主要输出 | 能回答的问题 |
-|---|---|---|---|---|
-| 链路预算（Link Budget） | 一条静态星地链路 | EIRP、G/T、路径损耗、带宽、附加损耗 | CNR、CIR、CNIR | 功率上是否有可能通信 |
-| 链路级仿真（Link-Level Simulation，LLS） | 一条链路、一个或少数信号 | 波形、编码、TDL/CDL、频偏、时偏、相位噪声、接收机 | 检测率、估计误差、BLER、链路吞吐量 | 同步、接入和解码算法能否工作 |
-| 系统级仿真（System-Level Simulation，SLS） | 多波束、多 UE 网络 | 星地几何、方向图、传播、负载、调度、CSI、干扰和链路抽象 | Coupling Loss、SIR/SINR、UE 吞吐量分布 | 网络中典型和边缘 UE 能获得多少性能 |
+### 0.1 仿真层级与问题边界
 
-三者并非相互替代：链路预算确定仿真的合理 SNR/SINR 区间；LLS 运行波形和接收机，形成同步、接入与 BLER 曲线；SLS 运行多波束网络，并通过链路抽象调用 LLS 结果，得到用户吞吐量。SSB 和 PRACH 的 LLS 结果主要形成覆盖或过程成功率模型，PDSCH/PUSCH 的 BLER 曲线则直接服务于数据传输抽象。
+链路级仿真（Link-Level Simulation，LLS）显式生成波形、信道和接收机，回答同步、接入和译码在给定损伤下的成功概率。系统级仿真（System-Level Simulation，SLS）运行用户落点、波束、调度、干扰和业务队列，通过链路抽象调用 LLS 曲线。多星仿真再加入可见性、候选服务、卫星切换和星间干扰。
 
-**原文定位：**TR 38.821 Clause 6.1、Clause 6.1.1～6.1.4。
-
----
-
-## 1. 卫星波束理论
-
-卫星波束仿真的基础不是地面六边形本身，而是“星地位置 \(\rightarrow\) 卫星观察方向 \(\rightarrow\) 波束离轴角 \(\rightarrow\) 天线增益 \(\rightarrow\) 地面覆盖与干扰”的计算链。本章先建立这条链，再说明 19 波束与 wrap-around 如何构造。
-
-### 1.1 参考场景与终端类型
+### 0.2 公共场景与终端类型
 
 Clause 6.1 主要使用以下场景：
 
@@ -46,407 +38,42 @@ S-band 基线终端是手持 UE，载频约 2 GHz，发射功率 23 dBm、天线
 
 系统级仿真用 Set-1 和 Set-2 表示两套卫星能力假设。Set-1 通常具有更大口径、更窄波束、更高 EIRP 密度和更高 G/T；Set-2 的波束更宽，但链路预算更弱。它们是参数集合，不是两种算法。
 
-### 1.2 三层几何对象与卫星本地坐标系
+### 0.3 公共输入及其来源
 
-理解波束布局时，需要先把三种对象分开：
-
-1. **地固位置。** 卫星和 UE 在地心地固坐标系（Earth-Centered, Earth-Fixed，ECEF）中分别由位置向量 \(\mathbf r_s\) 和 \(\mathbf r_p\) 表示，单位通常为 km；这一级用于计算斜距、仰角和地表交点。
-2. **卫星观察方向。** 从卫星指向某个地面点的射线先归一化为单位向量；天线方向图只关心方向，不关心这条射线有多长。
-3. **UV 方向余弦。** 把单位方向在卫星本地横向轴上的两个分量记为 \((u,v)\)；它们无量纲，不是卫星附近的物理距离，也不是地面经纬度。
-
-对参考卫星建立本地正交基。令 \(\mathbf e_z\) 从卫星指向地心，\(\mathbf e_u\) 位于轨道平面内并垂直于星地心连线，\(\mathbf e_v\) 为轨道面法向。若 \(\mathbf n_{\mathrm{orb}}\) 是单位轨道面法向，可采用
-
-\[
-\mathbf e_z=-\frac{\mathbf r_s}{\|\mathbf r_s\|},
-\qquad
-\mathbf e_u=
-\frac{\mathbf n_{\mathrm{orb}}\times\mathbf e_z}
-{\|\mathbf n_{\mathrm{orb}}\times\mathbf e_z\|},
-\qquad
-\mathbf e_v=\mathbf e_z\times\mathbf e_u.
-\]
-
-\(\mathbf e_u\) 的正方向可以反选，但生成全部波束和 UE 方向时必须使用同一约定。对任意地面点 \(P\)，先计算卫星到该点的视线向量和斜距
-
-\[
-\mathbf q_p=\mathbf r_p-\mathbf r_s,
-\qquad
-\rho_p=\|\mathbf q_p\|,
-\qquad
-\widehat{\mathbf d}_p=\frac{\mathbf q_p}{\rho_p}.
-\]
-
-再投影到卫星本地基：
-
-\[
-u=\widehat{\mathbf d}_p^{\mathsf T}\mathbf e_u,
-\qquad
-v=\widehat{\mathbf d}_p^{\mathsf T}\mathbf e_v,
-\qquad
-w=\widehat{\mathbf d}_p^{\mathsf T}\mathbf e_z.
-\]
-
-对朝向地球的可见方向，\(w>0\)，且
-
-\[
-u^2+v^2+w^2=1,
-\qquad
-w=\sqrt{1-u^2-v^2}.
-\]
-
-若 \(\theta\) 是该射线相对天底轴 \(\mathbf e_z\) 的卫星侧离轴角，\(\phi\) 是其在 UV 平面内的方位角，则
-
-\[
-u=\sin\theta\cos\phi,
-\qquad
-v=\sin\theta\sin\phi,
-\qquad
-w=\cos\theta,
-\]
-
-\[
-\theta=\arcsin\sqrt{u^2+v^2},
-\qquad
-\phi=\operatorname{atan2}(v,u).
-\]
-
-```{=latex}
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[>=Stealth,scale=0.92]
-  \begin{scope}[xshift=-3.45cm]
-    \node[font=\bfseries\small,deepblue] at (0,2.18) {(a) 卫星本地单位半球};
-    \draw[deepblue!85,thick] (0,0) ellipse (2.05 and 1.25);
-    \draw[deepblue!45,dashed] (0,-1.25) arc[start angle=-90,end angle=90,x radius=0.55,y radius=1.25];
-    \draw[->,thick,deepblue] (0,0) -- (0,1.72);
-    \node[deepblue,anchor=east,font=\small] at (-0.08,1.58) {$\mathbf e_z$（指向地心）};
-    \draw[->,thick,tealblue] (0,0) -- (2.45,0) node[right] {$\mathbf e_u$};
-    \draw[->,thick,gray!75] (0,0) -- (-1.25,-0.95) node[below left] {$\mathbf e_v$};
-    \coordinate (B) at (1.25,1.02);
-    \draw[->,very thick,accentorange] (0,0) -- (B) node[above right] {$\widehat{\mathbf d}$};
-    \draw[dashed,accentorange!80] (B) -- (1.25,0);
-    \draw[accentorange,thick,->] (0,0.62) arc[start angle=90,end angle=39,radius=0.62];
-    \node[accentorange] at (0.48,0.63) {$\theta$};
-    \node[gray!75,align=center,font=\small] at (0,-1.70) {每条射线先归一化到单位半球};
-  \end{scope}
-  \begin{scope}[xshift=3.25cm]
-    \node[font=\bfseries\small,deepblue] at (0,2.18) {(b) 沿 $\mathbf e_z$ 观察的 UV 投影};
-    \draw[deepblue!85,thick] (0,0) circle (1.42);
-    \draw[->,thick,tealblue] (-1.75,0) -- (1.9,0) node[right] {$u$};
-    \draw[->,thick,tealblue] (0,-1.65) -- (0,1.78);
-    \node[tealblue,anchor=east] at (-0.08,1.55) {$v$};
-    \coordinate (Puv) at (0.98,0.72);
-    \fill[accentorange] (Puv) circle (2.3pt) node[above right] {$P(u,v)$};
-    \draw[very thick,accentorange] (0,0) -- (Puv);
-    \draw[dashed,gray!75] (Puv) -- (0.98,0) node[below,black] {$u$};
-    \draw[dashed,gray!75] (Puv) -- (0,0.72) node[left,black] {$v$};
-    \draw[accentorange,thick,->] (0.55,0) arc[start angle=0,end angle=36.3,radius=0.55];
-    \node[accentorange] at (0.62,0.23) {$\phi$};
-    \node[gray!75,align=center,font=\small] at (0,-2.00) {$\sqrt{u^2+v^2}=\sin\theta$；\quad $w=\cos\theta$};
-  \end{scope}
-\end{tikzpicture}
-\caption{单位方向到 UV 方向余弦的映射。参照 TR 38.821 Table 6.1.1.1-4 中的原图重绘。}
-\end{figure}
-```
-
-图 1 的“投影”是把单位方向取出 \(u,v\) 两个分量。图上的单位圆表示所有可能方向的数学边界；NTN 只使用其中能够与地球表面相交的区域。标准所说的“在 UV 平面上做六边形映射”，指在这个方向空间排列**波束视轴**，并不是先在地面画六边形再搬到卫星附近。
-
-### 1.3 地面仰角、卫星离轴角与地心角
-
-同一条星地射线会产生三个不同顶点的角度：
-
-| 几何量 | 顶点 | 两条边 | 工程含义 |
-|---|---|---|---|
-| 地面仰角 \(\varepsilon\) | 地面点 \(P\) | 当地水平线与 \(P\rightarrow S\) | UE 看卫星有多高 |
-| 卫星离轴角 \(\theta\) | 卫星 \(S\) | \(S\rightarrow O\) 与 \(S\rightarrow P\) | 卫星波束偏离天底多少 |
-| 地心角 \(\psi\) | 地心 \(O\) | \(O\rightarrow N\) 与 \(O\rightarrow P\) | 地面点离星下点 \(N\) 多远 |
-
-这三个角不能互换。特别是“地面仰角为 \(45^\circ\)”并不表示卫星天线偏离天底 \(45^\circ\)。
-
-```{=latex}
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[>=Stealth,scale=0.93]
-  \coordinate (O) at (0,0);
-  \coordinate (N) at (0,2.2);
-  \coordinate (S) at (0,5.0);
-  \coordinate (P) at (1.62,1.49);
-  \coordinate (T1) at (0.92,2.25);
-  \coordinate (T2) at (2.32,0.73);
-  \draw[fill=softblue,draw=deepblue,thick] (O) circle (2.2);
-  \draw[deepblue!45,dashed] (O) -- (S);
-  \draw[deepblue!65,thick] (O) -- (P);
-  \draw[very thick,accentorange] (S) -- (P) node[midway,right=3pt,black] {$\rho$};
-  \draw[gray!75,dashed] (T1) -- (T2);
-  \fill[deepblue] (O) circle (2pt) node[below left] {地心 $O$};
-  \fill[deepblue] (N) circle (2pt) node[above left=2pt] {星下点 $N$};
-  \fill[accentorange] (S) circle (2.6pt) node[above] {卫星 $S$};
-  \fill[deepblue] (P) circle (2.6pt);
-  \node[deepblue,anchor=west] at (1.92,1.78) {地面点 $P$};
-  \pic[draw=accentorange,thick,"$\theta$",angle eccentricity=1.35,angle radius=8mm] {angle=O--S--P};
-  \pic[draw=tealblue,thick,"$\psi$",angle eccentricity=1.35,angle radius=8mm] {angle=P--O--N};
-  \pic[draw=accentorange,thick,"$\varepsilon$",angle eccentricity=1.45,angle radius=7mm] {angle=S--P--T1};
-  \node[font=\small,anchor=west] at (2.30,0.74) {当地水平线};
-  \node[anchor=west,align=left,font=\small] at (3.15,3.55) {$R_E=OP=ON$\\$R_s=OS=R_E+h$};
-\end{tikzpicture}
-\caption{球形地球上的星地几何：地面仰角、卫星离轴角和地心角。图形不按 GEO 高度比例绘制。}
-\end{figure}
-```
-
-令从地面点 \(P\) 指向卫星的单位向量为 \(\widehat{\mathbf l}\)。由于仰角 \(\varepsilon\) 是视线相对当地水平面的夹角，地面径向量与视线的点积为
-
-\[
-\mathbf r_p^{\mathsf T}\widehat{\mathbf l}
-=R_E\sin\varepsilon.
-\]
-
-卫星位置可写为 \(\mathbf r_s=\mathbf r_p+\rho\widehat{\mathbf l}\)。令 \(R_s=R_E+h\)，对其模平方可得
-
-\[
-R_s^2
-=\|\mathbf r_p+\rho\widehat{\mathbf l}\|^2
-=R_E^2+\rho^2+2R_E\rho\sin\varepsilon.
-\]
-
-这是关于 \(\rho\) 的二次方程。取能够给出 \(\rho>0\) 的根，斜距为
-
-\[
-\rho
-=-R_E\sin\varepsilon
-+\sqrt{R_s^2-R_E^2\cos^2\varepsilon},
-\]
-
-所以根号前的 \(-R_E\sin\varepsilon\) **不是笔误**。它来自二次方程求根；若改成正号，会把卫星沿视线方向的位置重复加上一段地球半径投影。两个极端情况也能校验该符号：当 \(\varepsilon=90^\circ\) 时，\(\rho=R_s-R_E=h\)；当 \(\varepsilon=0^\circ\) 时，\(\rho=\sqrt{R_s^2-R_E^2}\)，正好是地平线切线距离。
-
-并有
-
-\[
-\sin\theta=\frac{R_E}{R_s}\cos\varepsilon,
-\qquad
-\psi=90^\circ-\varepsilon-\theta.
-\]
-
-以 GEO 基线为例，取 \(R_E=6371\ \mathrm{km}\)、\(R_s=42157\ \mathrm{km}\)、地面目标仰角 \(\varepsilon=45^\circ\)，则
-
-\[
-\rho\approx37411\ \mathrm{km},
-\qquad
-\theta\approx6.13^\circ,
-\qquad
-\psi\approx38.87^\circ.
-\]
-
-于是中心波束在 UV 平面中的径向坐标为
-
-\[
-\sqrt{u_0^2+v_0^2}=\sin\theta\approx0.1069.
-\]
-
-若选择 \(u\) 轴朝向该地面目标，则得到 TR 38.821 Table 6.1.1.1-6 中的 \((u_0,v_0)=(0.107,0)\)。这说明表中的 \(0.107\) 是方向余弦，\(45^\circ\) 是地面仰角，\(6.13^\circ\) 才是卫星侧离轴角。LEO 中心波束指向星下点、地面目标仰角为 \(90^\circ\) 时，\(\theta=0\)，所以中心坐标为 \((0,0)\)。
-
-### 1.4 波束视轴、UE 方向与真实离轴角
-
-第 \(i\) 个波束首先指定一个波束中心 \(C_i\)。从卫星 \(S\) 指向 \(C_i\) 的单位射线是波束视轴 \(\mathbf b_i\)，也就是天线最大增益方向。实际 UE 位于 \(U\) 时，从卫星指向 UE 的单位射线记为 \(\mathbf d\)：
-
-\[
-\mathbf b_i=
-\frac{\mathbf r_{c,i}-\mathbf r_s}
-{\|\mathbf r_{c,i}-\mathbf r_s\|},
-\qquad
-\mathbf d=
-\frac{\mathbf r_u-\mathbf r_s}
-{\|\mathbf r_u-\mathbf r_s\|}.
-\]
-
-如果 UE 正好位于波束中心，两条射线重合；如果 UE 偏离中心，两条射线在卫星处形成夹角 \(\alpha_i\)。这个角才是第 \(i\) 个天线方向图的输入。
-
-```{=latex}
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[>=Stealth,scale=0.95]
-  \coordinate (S) at (0,3.5);
-  \coordinate (C) at (-1.25,0.05);
-  \coordinate (U) at (1.15,0.02);
-  \draw[deepblue!70,thick] (-3.4,-0.25) .. controls (-1.8,0.18) and (1.8,0.18) .. (3.4,-0.25);
-  \fill[accentorange] (S) circle (2.5pt) node[above] {卫星 $S$};
-  \fill[deepblue] (C) circle (2.4pt) node[below left] {波束中心 $C_i$};
-  \fill[tealblue] (U) circle (2.4pt) node[below right] {UE：$U$};
-  \draw[->,very thick,accentorange] (S) -- (C) node[midway,left=2pt] {$\mathbf b_i$};
-  \draw[->,very thick,tealblue] (S) -- (U) node[midway,right=2pt] {$\mathbf d$};
-  \draw[accentorange!55,dashed,thick] (S) -- (-2.05,-0.10);
-  \draw[accentorange!55,dashed,thick] (S) -- (-0.45,0.11);
-  \pic[draw=deepblue,thick,"$\alpha_i$",angle eccentricity=1.45,angle radius=9mm] {angle=C--S--U};
-  \node[align=center,font=\small,text=gray!80] at (4.35,1.75) {图中角度被放大\\以便区分两条射线};
-\end{tikzpicture}
-\caption{波束视轴与实际 UE 方向。$\alpha_i$ 表示 UE 相对第 $i$ 个波束峰值方向的偏离。}
-\end{figure}
-```
-
-真实离轴角由单位向量点积计算：
-
-\[
-\alpha_i
-=\arccos\!\left(\operatorname{clip}
-\left(\mathbf b_i^{\mathsf T}\mathbf d,-1,1\right)\right).
-\]
-
-其中 \(\operatorname{clip}\) 只用于避免浮点误差使点积略超出 \([-1,1]\)。若把两条方向都写成卫星本地坐标
-
-\[
-\mathbf b_i^{(L)}=
-\begin{bmatrix}u_i&v_i&w_i\end{bmatrix}^{\mathsf T},
-\qquad
-\mathbf d^{(L)}=
-\begin{bmatrix}u&v&w\end{bmatrix}^{\mathsf T},
-\]
-
-则完全等价地有
-
-\[
-\cos\alpha_i
-=u_i u+v_i v
-+\sqrt{1-u_i^2-v_i^2}\sqrt{1-u^2-v^2}.
-\]
-
-因此计算过程可以直观地理解为：**先把“波束中心”和“UE”分别变成从卫星出发的两条单位射线，再求两条射线之间的夹角。**这里没有把地面距离直接当成天线离轴角。
-
-UV 平面距离
-
-\[
-\Delta\rho_{\mathrm{UV}}
-=\sqrt{(u-u_i)^2+(v-v_i)^2}
-\]
-
-只是两个方向余弦点之间的平面距离。只有在**靠近天底且角度间隔很小**时，才可使用 \(\alpha_i\approx\Delta\rho_{\mathrm{UV}}\)；一般情况下应使用上面的点积公式。若希望在任意中心附近做一阶近似，令 \(\Delta u=u-u_i\)、\(\Delta v=v-v_i\)、\(w_i=\sqrt{1-u_i^2-v_i^2}\)，则
-
-\[
-\alpha_i^2
-\approx
-(\Delta u)^2+(\Delta v)^2
-+\frac{(u_i\Delta u+v_i\Delta v)^2}{w_i^2}.
-\]
-
-例如中心视轴为 \((u_i,v_i)=(0.107,0)\)，某 UE 方向为 \((u,v)=(0.110,0.003)\)。简单 UV 距离为 \(0.004243\)，若按小角度弧度近似换算为 \(0.2431^\circ\)；精确点积得到 \(\alpha_i=0.2438^\circ\)。两者在这个 GEO 中心附近非常接近，是因为中心离天底不远且 UE 偏移很小，而不是因为 UV 距离在所有位置都等于球面夹角。
-
-### 1.5 方向图、3 dB 轮廓与卫星小区
-
-TR 38.811 Clause 6.4.1 采用圆孔径参考方向图。设 \(a\) 为孔径半径、\(k=2\pi/\lambda\)，把上一节得到的真实离轴角 \(\alpha_i\) 代入，则归一化功率增益为
-
-\[
-g(\alpha_i)=
-\begin{cases}
-1, & \alpha_i=0,\\[3pt]
-4\left|\dfrac{J_1(ka\sin\alpha_i)}{ka\sin\alpha_i}\right|^2,
-& \alpha_i\ne0,
-\end{cases}
-\]
-
-\[
-G_i(\alpha_i)_{\mathrm{dBi}}
-=G_{\max,i,\mathrm{dBi}}+10\log_{10}g(\alpha_i).
-\]
-
-这就形成一条完整几何链：
-
-\[
-\text{ECEF 位置}
-\rightarrow
-\text{卫星到地面点的单位方向}
-\rightarrow
-\text{真实离轴角 }\alpha_i
-\rightarrow
-\text{天线增益 }G_i
-\rightarrow
-\text{RSRP、接入与干扰}.
-\]
-
-| 对象 | 含义 | 边界性质 |
+| 模块 | 在线/离线输入 | 输出到仿真 |
 |---|---|---|
-| 波束视轴 | 最大增益方向 | UV 平面中的一个方向点 |
-| 3 dB 轮廓 | 增益比峰值下降 3 dB | 单位方向空间中的等增益线 |
-| 地面波束足迹 | 某一增益或覆盖门限在地表的投影 | 斜视时会拉伸、畸变 |
-| Voronoi 区域 | 按相邻波束中心划分的 UE 生成区域 | 系统级仿真的抽象边界 |
-| 卫星小区 | 最终由同一服务波束承载的 UE 集合 | 基线按 RSRP 决定接入 |
+| [系统与场景](./01_NTN系统架构与部署场景_学习笔记.md) | 平台、载荷、频段、终端、业务 | 拓扑与参数集 |
+| [轨道与几何](./02_卫星轨道时间与链路几何_学习笔记.md) | 星历、时间、UE 位置 | 可见性、斜距、方向、时延、多普勒 |
+| [天线与波束](./03_NTN天线波束与覆盖组织_学习笔记.md) | 方向和波束配置 | 增益、服务/候选波束、资源映射 |
+| [传播与信道](./04_NTN传播损耗与信道模型_学习笔记.md) | 几何、天线和场景 | 路径增益、时变信道、噪声、抽象输入 |
+| [空口与协议](./05_NTN空口时频与协议适配_学习笔记.md) | 时延、多普勒、测量和配置 | TA、时序、反馈、HARQ、切换状态 |
 
-UV 平面中的六边形不是天线方向图的硬边界。方向图在六边形外仍连续存在；UE 也可能因实际 RSRP 而接入另一个波束。这正是系统级仿真必须对“每个波束—每个 UE”计算真实方向增益的原因。
+每个量必须带参考点、单位、时间戳和更新周期。离线 LLS 曲线不能读取未来在线状态；在线 SLS 也不能用未校准的 SINR 直接假定 BLER。
 
-### 1.6 19 波束布局与 NTN wrap-around
+### 0.4 公共假设与多速率时间尺度
 
-TR 38.821 定义 UV 平面相邻波束间距（Adjacent Beam Spacing，ABS）为
+场景配置必须同时声明星座或代表卫星、频段、带宽、UE 空间分布、业务负载以及理想信息与延迟/误差信息的边界。不同模块按不同时间尺度更新：
 
-\[
-d_{\mathrm{ABS}}
-=\sqrt{3}\sin\left(\frac{\mathrm{HPBW}}{2}\right),
-\]
+| 时间尺度 | 更新对象 | 典型输出 |
+|---|---|---|
+| 轨道/几何周期 | 卫星状态、可见性、距离、角度、时延和公共多普勒 | 带时间戳的几何接口 |
+| 信道周期 | 传播状态、LSP、簇/抽头与局部多普勒 | 时变链路状态 |
+| 测量/报告周期 | SSB/CSI-RS 测量、CSI 量化和反馈 | 带老化时间的报告 |
+| 调度周期 | PRB、功率、MCS、HARQ 和队列 | 执行时刻的资源状态 |
 
-其中 HPBW 是完整的 3 dB 波束宽度。小角度下
+任何模块消费上游量时都要检查其时间戳，不能把不同参考时刻的几何、波束和 CSI 拼成同一个瞬时 SINR。
 
-\[
-d_{\mathrm{ABS}}\approx\frac{\sqrt{3}}{2}\mathrm{HPBW}.
-\]
+### 0.5 校准、性能评估与统计输出
 
-用六边形轴坐标 \((q,r)\) 生成波束中心：
+校准阶段先固定场景、链路预算参考点、方向图、噪声带宽、干扰合并位置和链路抽象曲线，并对齐 Coupling Loss、Geometry SIR/SINR 等中间量；性能评估阶段再比较同步器、接收机、调度器或波束算法。统一输出至少包括覆盖/接入成功率、同步检测概率、BLER、SINR、吞吐量、频谱效率、时延、队列长度、切换或波束失败率、服务中断和干扰分布，并报告样本数、随机种子、置信区间或分位数。
 
-\[
-u(q,r)=u_0+d_{\mathrm{ABS}}\left(q+\frac{r}{2}\right),
-\qquad
-v(q,r)=v_0+d_{\mathrm{ABS}}\frac{\sqrt{3}}{2}r.
-\]
+结论必须随模型层级解释：LLS 只证明给定链路假设下的收发机性能；单星 SLS 证明给定负载、调度和复用下的网络性能；多星结果还依赖星座、服务选择和星间协调。
 
-内层 19 波束满足
-
-\[
-\max\bigl(|q|,|r|,|q+r|\bigr)\le2,
-\]
-
-即中心 1 个、第一圈 6 个、第二圈 12 个。
-
-传统地面蜂窝 wrap-around 依赖平移或镜像对称性。NTN 中，非天底波束的地面投影会受到地球曲率、斜距和仰角影响，因此 TR 38.821 要求独立生成外围波束：
-
-- FRF = 1：在 19 波束外增加 2 圈，总计 61 个波束；
-- FRF > 1：增加 4 圈，总计 127 个波束；
-- 外围波束只用于形成干扰，性能统计只使用内层 19 波束中的 UE；
-- 与服务资源同频、同极化且同时活动的波束才进入实际干扰集合。
-
-```{=latex}
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[scale=0.72]
-  \foreach \q in {-4,...,4}{
-    \foreach \r in {-4,...,4}{
-      \pgfmathtruncatemacro{\s}{-\q-\r}
-      \pgfmathtruncatemacro{\ring}{max(abs(\q),max(abs(\r),abs(\s)))}
-      \ifnum\ring<5
-        \pgfmathsetmacro{\xx}{0.72*(\q+0.5*\r)}
-        \pgfmathsetmacro{\yy}{0.72*0.8660254*\r}
-        \ifnum\ring<3
-          \node[regular polygon,regular polygon sides=6,minimum size=0.69cm,
-                draw=deepblue!85,fill=deepblue!20,inner sep=0pt] at (\xx,\yy) {};
-        \else
-          \node[regular polygon,regular polygon sides=6,minimum size=0.69cm,
-                draw=gray!60,fill=gray!8,inner sep=0pt] at (\xx,\yy) {};
-        \fi
-      \fi
-    }
-  }
-  \node[fill=deepblue!20,draw=deepblue!85,minimum width=0.45cm,minimum height=0.28cm] at (4.8,0.8) {};
-  \node[anchor=west] at (5.15,0.8) {内层 19 波束：统计区域};
-  \node[fill=gray!8,draw=gray!60,minimum width=0.45cm,minimum height=0.28cm] at (4.8,0.15) {};
-  \node[anchor=west] at (5.15,0.15) {附加波束：干扰区域};
-\end{tikzpicture}
-\caption{FRF=1 的附加波束示意。外围波束必须独立计算几何与增益；原理对应 TR 38.821 Figure 6.1.1.1-1。}
-\end{figure}
-```
-
-**原文定位：**TR 38.821 Table 6.1.1.1-4～6、Figure 6.1.1.1-1～2；TR 38.811 Clause 6.4.1。Table 6.1.1.1-4 直接给出 UV 平面约定、19 波束基线和 ABS 公式；地固位置到单位方向、真实离轴角以及一阶 UV 度量是对仿真实现过程的展开说明。
-
----
-
-## 2. 单星链路仿真
+## 1 单星链路仿真
 
 单星 LLS 把一颗服务卫星与一个或少数地面终端之间的物理链路单独取出，显式生成基带波形、信道和接收机。它不追求复现整个多波束网络，而是在受控条件下回答 SSB 能否同步、PRACH 能否检测、PDSCH/PUSCH 能否解码，以及残余 NTN 损伤会使性能曲线移动多少。
 
-### 2.1 波形级蒙特卡洛流程
+### 1.1 波形级蒙特卡洛流程
 
 LLS 的核心是：固定一个链路场景，在一系列 SNR/SINR 点上重复生成真实基带信号，通过信道和射频损伤，再运行接收机并统计成功率。一次数据传输试验通常包含以下步骤：
 
@@ -508,9 +135,26 @@ R_{\mathrm{LLS}}
 
 这仍是“给定资源和 MCS 的单链路吞吐量”，不是多用户网络中的 UE 吞吐量。
 
-### 2.2 下行同步与 SSB
+### 1.2 下行同步与 SSB
 
 下行同步 LLS 研究 UE 能否从同步信号块（Synchronization Signal Block，SSB）完成小区搜索，并把残余定时和频率误差压到后续接收可用的范围。一个 SSB 占连续 4 个 OFDM 符号和 240 个子载波，内部包含主同步信号（Primary Synchronization Signal，PSS）、辅同步信号（Secondary Synchronization Signal，SSS）、物理广播信道（Physical Broadcast Channel，PBCH）及其解调参考信号（Demodulation Reference Signal，DM-RS）。卫星可在不同波束方向依次发送 SSB，UE 因而还需要在候选时刻、频率假设和接收波束之间搜索。
+
+NR PSS 是长度 127 的 BPSK m 序列，不应沿用 LTE PSS 的 Zadoff-Chu 叙述。令 \(d_u[n]\) 为第 \(u\in\{0,1,2\}\) 个 PSS 候选，联合定时和频偏搜索可以概括为
+
+\[
+C_{u,\nu}(m)=
+\left|
+\sum_n r[n]d_u^*[n-m]
+e^{-j2\pi\nu nT_s}
+\right|^2,
+\]
+
+\[
+(\hat u,\hat\nu,\hat m)
+=\arg\max_{u,\nu,m}C_{u,\nu}(m).
+\]
+
+星历预补偿或公共多普勒预测用于缩小 \(\nu\) 的搜索窗，不会消除残余多普勒、差分多普勒、长时延和低 SNR 对相关峰的影响。
 
 TR 38.821 Table 6.1.2-1 的主要设置包括：
 
@@ -544,7 +188,7 @@ TR 38.821 Table 6.1.2-1 并不强制统一上述每一步的接收机实现，�
 
 其中 \(A_{\mathrm{UE}}\) 是 UE 晶振误差（ppm），\(D_{\mathrm{sat}}\) 和 \(D_{\mathrm{UE}}\) 分别是卫星与 UE 运动产生的多普勒（ppm）。仿真在 \([-\Delta f_{\max},+\Delta f_{\max}]\) 内均匀抽取频偏；公共卫星多普勒可以假设按波束中心预补偿或在接收端后补偿。
 
-#### 公共频移与 Jakes 多普勒谱
+#### 1.2.1 公共频移与 Jakes 多普勒谱
 
 公共多普勒和局部多径多普勒描述的是两个不同现象：
 
@@ -586,7 +230,7 @@ TR 38.821 Table 6.1.2-1 明确要求：Rayleigh 衰落抽头的 Jakes 谱应在�
 
 因此，同步 LLS 不只判断“能否找到 SSB”，还检验找到以后留下的残余误差能否支持 PBCH 和后续数据解调。TR 38.821 Clause 6.3.2 的研究结论是：采用波束特定的公共频移预补偿时，Rel-15 SSB 可为 GEO/LEO 提供稳健的初始同步；LEO 若不做该预补偿，则通常需要提高 UE 搜索复杂度，但研究阶段没有认定必须修改 SSB 波形。
 
-### 2.3 PRACH 随机接入
+### 1.3 PRACH 随机接入
 
 PRACH LLS 研究 gNB 能否在差分时延、差分频偏、近远效应和多用户碰撞下检测前导，并估计到达时间与频率偏差。TR 38.821 Table 6.1.2-2～3 采用以下关键假设：
 
@@ -606,9 +250,9 @@ PRACH LLS 研究 gNB 能否在差分时延、差分频偏、近远效应和多�
 
 四组研究场景分别施加：小延时/大频偏、中延时/中频偏、大延时/小频偏，以及完成开环定时和频率补偿后的“小延时/小频偏”。它们是在分离检验 PRACH 的频偏鲁棒性、搜索窗口和补偿收益。
 
-### 2.4 PDSCH/PUSCH 数据传输
+### 1.4 PDSCH/PUSCH 数据传输
 
-数据传输 LLS 使用 NR 信道编码、现实信道估计和频率选择性 TDL/CDL 模型。TR 38.821 Table 6.1.2-4 规定：
+数据传输 LLS 使用 NR 信道编码、现实信道估计和频率选择性 TDL/CDL 模型。TR 38.821 Table 6.1.2-4 列出评估参数：
 
 - S-band 采用 15/30 kHz SCS；Ka-band 采用 60/120 kHz SCS；
 - 同步后残余频率误差基线为 0.1 ppm，并假设上行预补偿；
@@ -620,7 +264,7 @@ PRACH LLS 研究 gNB 能否在差分时延、差分频偏、近远效应和多�
 
 HPA 非线性不属于这一 LLS 基线；TR 38.821 也记录了至少对 Rel-17 不需要规定 NTN 专用的下行 PAPR 优化。该结论只表示基线评估没有纳入该损伤，不表示卫星功放不存在回退或非线性问题。
 
-### 2.5 链路级结果的可靠性
+### 1.5 链路级结果的可靠性
 
 在每个 SNR 点只运行少量试验，会使低 BLER 区的统计误差很大。工程实现通常采用“累计到足够错误块数，或达到最大试验数”作为停止条件，并报告置信区间。还需要固定随机种子、信道 realization、接收机版本和全部参数，否则不同算法的差异可能被随机波动或未声明假设掩盖。
 
@@ -628,11 +272,11 @@ HPA 非线性不属于这一 LLS 基线；TR 38.821 也记录了至少对 Rel-17
 
 ---
 
-## 3. 单星系统级仿真
+## 2 单星系统级仿真
 
-单星 SLS 复用第 1 章的波束几何和第 2 章的链路性能，把一颗卫星的多波束、UE、同频干扰、调度和业务放入同一个网络时间循环。它先校准长期几何量，再通过链路抽象把每个调度资源上的 SINR 转换为 BLER 和吞吐量。
+单星 SLS 复用“公共输入及其来源”和“单星链路仿真”的输出，把一颗卫星的多波束、UE、同频干扰、调度和业务放入同一个网络时间循环。它先校准长期几何量，再通过链路抽象把每个调度资源上的 SINR 转换为 BLER 和吞吐量。
 
-### 3.1 校准阶段与性能评估阶段
+### 2.1 校准阶段与性能评估阶段
 
 SLS 首先生成“网络”，再让网络随时间运行。TR 38.821 把它分成两个复杂度层次：
 
@@ -653,7 +297,7 @@ SLS 首先生成“网络”，再让网络随时间运行。TR 38.821 把它分
 
 校准的目的不是评价某个调度器，而是让不同公司的仿真器先在几何、天线、路径损耗和干扰计算上对齐。只有校准一致后，吞吐量差异才可以解释为接收机、CSI、调度或业务假设的影响。
 
-### 3.2 网络初始化与一次用户落点
+### 2.2 网络初始化与一次用户落点
 
 一次 Monte Carlo 用户落点（drop）可按以下顺序构造：
 
@@ -672,7 +316,7 @@ i_u^*=\arg\max_i \mathrm{RSRP}_{u,i}.
 
 UE 的 Voronoi 区域用于初始生成，最终服务波束由 RSRP 决定。在倾斜覆盖、不同斜距或非均匀功率下，这两个区域不一定完全重合。
 
-### 3.3 调度时间循环与干扰计算
+### 2.3 调度时间循环与干扰计算
 
 性能评估会以时隙、调度周期或若干传输时间间隔为步长推进。每个时间步通常包含：
 
@@ -685,7 +329,7 @@ UE 的 Voronoi 区域用于初始生成，最终服务波束由 RSRP 决定。�
 7. 更新 HARQ 进程、ACK/NACK、重传队列和成功交付比特；
 8. 经过足够长的仿真时间和多个 drop 后，汇总 UE 吞吐量与资源利用率。
 
-#### Coupling Loss 与链路预算的接口
+#### 2.3.1 Coupling Loss 与链路预算的接口
 
 耦合损耗（Coupling Loss，CL）是发射天线端口到接收天线端口之间的总长期信号损失。采用一致的端口参考点时，一条“发射源 \(j\) 到 UE \(u\)”的链路可写为
 
@@ -715,7 +359,38 @@ P_{\mathrm r,u,j,\mathrm{dBm}}
 
 例如 \(P_{\mathrm t}=30\ \mathrm{dBm}\)、\(CL=134\ \mathrm{dB}\)，则 \(P_{\mathrm r}=-104\ \mathrm{dBm}\)。若接收带宽内噪声为 \(-109\ \mathrm{dBm}\)，对应 \(\mathrm{CNR}=5\ \mathrm{dB}\)。
 
-#### CIR、SIR 与信道建模层次
+#### 2.3.2 CIR、SIR 与信道建模层次
+
+仿真器应先按来源保存每一类功率，再组成 SINR：
+
+\[
+\gamma_{u,k}=
+\frac{P^{\mathrm{des}}_{u,k}}
+{I^{\mathrm{same\ sat}}_{u,k}
++I^{\mathrm{other\ sat}}_{u,k}
++I^{\mathrm{adj}}_{u,k}
++N_{u,k}}.
+\]
+
+| 项 | 典型来源 | 建模所需信息 |
+|---|---|---|
+| 期望信号 \(P^{\mathrm{des}}\) | 服务卫星的服务波束 | 发射功率、服务增益、路径损耗、衰落和资源占用 |
+| 同卫星干扰 \(I^{\mathrm{same\ sat}}\) | 同一卫星其他共频波束 | 邻波束离轴增益、FRF、时频重叠和活动度 |
+| 异卫星干扰 \(I^{\mathrm{other\ sat}}\) | 其他可见卫星或相邻星座 | 可见性、波束指向、频率重叠、旁瓣和传播损耗 |
+| 邻道干扰 \(I^{\mathrm{adj}}\) | 相邻载波或系统泄漏 | ACLR、ACS 和频谱重叠；基线不建模时明确设为 0 |
+| 噪声 \(N\) | 接收机热噪声 | 带宽、噪声系数和温度；噪声不称为干扰 |
+
+每一条干扰链路都使用同一基本结构：
+
+\[
+P_{i\rightarrow u}
+=P_{\mathrm{tx},i}
+G_{\mathrm{tx},i}(\theta_{i,u})
+G_{\mathrm{rx},u}(\phi_{i,u})
+L_{i,u}^{-1}H_{i,u}A_{i,u}O_{i,u},
+\]
+
+其中 \(A_{i,u}\) 是业务活动度，\(O_{i,u}\) 是时频资源重叠。下行干扰源是卫星波束；上行干扰源是实际被调度 UE，还需加入 UE 功控、终端天线指向和调度同步差异。
 
 载干比（Carrier-to-Interference Ratio，CIR）与信干比（Signal-to-Interference Ratio，SIR）分别写为
 
@@ -795,13 +470,13 @@ MMSE-IRC 合并方向与
 
 一致，其中 \(\mathbf R_{I+N,k}\) 是干扰加噪声协方差矩阵。它利用多个接收维度抑制具有不同空间特征的干扰；若接收维度不足、干扰方向与有用信号重合或协方差估计不准，抑制能力会下降。
 
-### 3.4 上行与下行干扰的差异
+### 2.4 上行与下行干扰的差异
 
 下行时，每个干扰源是卫星上的另一个波束，发射方向和功率由波束配置决定。上行时，干扰源是其他波束中被同时调度的 UE，其位置、终端天线方向和功率控制均会变化。因此上行仿真还要为每个波束选择实际活动 UE，干扰分布通常比下行更分散，不能把“干扰波束中心”直接等效成上行 UE 的固定位置。
 
-### 3.5 链路抽象与 LLS/SLS 接口
+### 2.5 链路抽象与 LLS/SLS 接口
 
-SLS 在一个传输块内可能得到数十或数百个 PRB/子载波 SINR，但不能为每个资源都重新运行完整 OFDM 接收机。链路到系统映射（Link-to-System Mapping，L2S）先把频率选择性 SINR 压缩为有效 SINR，再查询第 2 章 LLS 得到的 BLER 曲线。
+SLS 在一个传输块内可能得到数十或数百个 PRB/子载波 SINR，但不能为每个资源都重新运行完整 OFDM 接收机。链路到系统映射（Link-to-System Mapping，L2S）先把频率选择性 SINR 压缩为有效 SINR，再查询“单星链路仿真”生成的 LLS BLER 曲线。
 
 一种常用工程方法是指数有效 SINR 映射（Exponential Effective SINR Mapping，EESM）：
 
@@ -835,7 +510,7 @@ p_{\mathrm{fail}}
 | SSB/PRACH | 直接统计检测与估计性能 | 作为覆盖或过程成功率模型 |
 | 用户长期吞吐量 | 不能直接给出 | 由调度、HARQ、负载和成功比特共同统计 |
 
-### 3.6 NTN 时变因素的系统级映射与频率复用
+### 2.6 NTN 时变因素的系统级映射与频率复用
 
 NTN 的时间变化在 SLS 中分为三个尺度：
 
@@ -854,7 +529,7 @@ NTN 的时间变化在 SLS 中分为三个尺度：
 
 这已经高于 0.1 ppm 同步残差对应的 3 kHz，说明公共补偿不能让波束内所有 UE 同时回到零频偏。多普勒进入 SLS 时，通常采用“离线 LLS 建库、在线按状态查询”的两阶段方法。
 
-#### 多普勒状态到 BLER 的映射
+#### 2.6.1 多普勒状态到 BLER 的映射
 
 离线 LLS 对不同 MCS 和损伤组合生成曲线族：
 
@@ -872,7 +547,7 @@ NTN 的时间变化在 SLS 中分为三个尺度：
 
 \[
 f_{\mathrm{sat},u}(t)
-=-\frac{f_c}{c}\frac{\mathrm d\rho_u(t)}{\mathrm dt},
+=-\frac{f_c}{c}\dot d_u(t),
 \]
 
 再扣除波束公共补偿并加入 UE 运动和晶振误差：
@@ -897,9 +572,36 @@ f_{\mathrm{sat},u}(t)
 
 两种方法只能选择一种。如果已经查询包含该多普勒损伤的曲线，就不能再从有效 SINR 中扣除一次 \(\Delta\gamma_D\)，否则会重复计入损失。例如 \(\Delta f_{\mathrm{res}}=12.6\ \mathrm{kHz}\)、SCS 为 60 kHz 时，\(\epsilon=0.21\)。SLS 可以在 \(\epsilon=0.2\) 与 0.3 的 LLS 曲线之间插值，也可以使用预先标定的 \(\epsilon=0.21\) 等效 SINR 损失。
 
-#### RTT、CSI 老化与 HARQ 时间轴
+#### 2.6.2 RTT、CSI 老化与 HARQ 时间轴
 
 长往返时延（Round-Trip Time，RTT）不能整体等效成固定 SINR 扣减。它至少影响 CSI 反馈老化、MCS 选择、ACK/NACK 返回、HARQ 进程占用、重传时刻和队列时延。
+
+CSI 是否改变波束编号取决于控制方式：
+
+- **星历驱动的开环波束计划：**波束中心和服务波束由位置、星历或预先计划决定，CSI 主要用于 CQI/MCS、PMI、RI 和链路自适应，不一定直接改变波束编号；
+- **测量驱动的闭环波束管理：**UE 测量候选 SSB/CSI-RS 波束并上报，网络依据延迟报告选择波束或 TCI 状态，报告老化会直接改变实际方向增益和干扰集合。
+
+闭环选择可以写成
+
+\[
+b_{\mathrm{sel}}(t)
+=\arg\max_b
+\widehat{\mathrm{RSRP}}_b(t-T_{\mathrm{CSI}}),
+\]
+
+\[
+L_{\mathrm{beam}}(t)
+=G_{\mathrm{best}}(t)-G_{b_{\mathrm{sel}}(t)}(t).
+\]
+
+实现中显式保存四个时刻：
+
+1. \(t_{\mathrm{meas}}\)：测量候选波束；
+2. \(t_{\mathrm{report}}\)：CSI/测量报告到达网络；
+3. \(t_{\mathrm{action}}\)：网络执行波束或 MCS 决策；
+4. \(t_{\mathrm{data}}\)：按当前几何、所选波束和当前干扰重新计算真实 SINR 与吞吐量。
+
+因此，报告时刻 CSI 是决策输入，不是数据时刻的真实 SINR。即使开环计划不由 CSI 改变波束编号，测量误差和时延仍会影响 MCS 与最终 BLER。
 
 若 CSI 的测量、上报和调度总老化时间为 \(T_{\mathrm{CSI}}\)，调度器在时刻 \(t\) 看到的量可写为
 
@@ -957,9 +659,9 @@ R\approx B_{\mathrm{beam}}\,\eta(\mathrm{SINR})(1-\delta),
 
 其中 \(B_{\mathrm{beam}}\) 是复用后的每波束带宽，\(\eta\) 是频谱效率，\(\delta\) 是控制、参考信号和重传等开销。因此“更高 SIR”不等于“更高吞吐量”。GEO Ka 校准中，同一 FRF 下 Set-1 与 Set-2 的中位 SIR 接近，而 Set-2 的 SINR 更差，说明其主要劣势来自 EIRP、G/T 和 Coupling Loss，而不是归一化波束布局本身产生了更强的相对干扰。
 
-### 3.7 输出指标、负载与单波束容量
+### 2.7 输出指标、负载与单波束容量
 
-校准阶段输出第 3.3 节定义的 Coupling Loss、Geometry SIR 和 Geometry SINR。CL 数值越低表示长期接收功率越强；SIR 差通常指向方向图、频率复用或同频活动干扰；SIR 尚可但 SINR 明显更差，则说明噪声或链路预算成为主要限制。性能阶段在此基础上加入快衰落、接收合并和链路抽象，输出瞬时 BLER 与长期吞吐量。
+校准阶段输出前述调度与干扰计算中定义的 Coupling Loss、Geometry SIR 和 Geometry SINR。CL 数值越低表示长期接收功率越强；SIR 差通常指向方向图、频率复用或同频活动干扰；SIR 尚可但 SINR 明显更差，则说明噪声或链路预算成为主要限制。性能阶段在此基础上加入快衰落、接收合并和链路抽象，输出瞬时 BLER 与长期吞吐量。
 
 性能评估统计所有 UE 长期吞吐量的 5%、50% 和 95% 分位。50% 是中位数，不是算术平均值；5% 分位表示仅有 5% UE 的吞吐量更低，但不严格等于固定地理位置上的“小区边缘”。分位排名同时受到几何、快衰落、干扰、调度和业务到达影响。
 
@@ -1002,9 +704,11 @@ N_{\mathrm{control}}
 
 ---
 
-## 4. 多星仿真
+## 3 多星仿真
 
 TR 38.821 Clause 6.1.4 允许复用 Table 6.1.1.1-9 中定义的单星测试场景，并建议多星评估优先考虑 LEO。单星 SLS 已经包含“一个卫星的多波束、UE、调度和同星干扰”；多星 SLS 在此基础上新增三个维度：
+
+本章的 Option 1/2 是**仿真范围选择**，不是 3GPP 空口协议选项。
 
 1. **轨道与可见性随时间变化。** 同一地面区域能够看到哪些卫星、各卫星的仰角和斜距都会变化；
 2. **服务关系跨卫星选择和切换。** UE 不仅在同一卫星的波束之间选择，还要在不同卫星之间选择服务链路；
@@ -1012,7 +716,7 @@ TR 38.821 Clause 6.1.4 允许复用 Table 6.1.1.1-9 中定义的单星测试场�
 
 因此，不能把 3 颗或 7 颗卫星简单处理成若干份完全重合的单星 19 波束图。每颗卫星必须具有独立的位置、局部坐标系、波束视轴、斜距、离轴角、传播损耗和资源活动状态。
 
-### 4.1 参考星座法
+### 3.1 Option 1：完整参考星座与较长时间演化
 
 Option-1 以一个完整参考星座为仿真对象。至少需要定义：
 
@@ -1034,7 +738,14 @@ Option-1 以一个完整参考星座为仿真对象。至少需要定义：
 
 参考星座法能够回答全球或区域覆盖率、可见卫星数量、过境与切换频率、星间同频干扰以及性能随纬度和时间的变化。代价是仿真规模大：如果星座有 \(N_s\) 颗卫星、每星 \(N_b\) 个波束、区域内 \(N_u\) 个 UE，朴素地计算全部候选链路约为 \(O(N_sN_bN_u)\)。实际实现通常先用仰角和区域包围盒筛掉不可见卫星及不相交波束，再对剩余链路计算精确方向图和传播损耗。
 
-### 4.2 区域多星波束布局法
+```mermaid
+flowchart TD
+    A[参考星座与轨道传播] --> B[逐时刻可见性]
+    B --> C[服务与干扰波束]
+    C --> D[覆盖、切换和长期统计]
+```
+
+### 3.2 Option 2：区域化代表卫星与波束布局
 
 Option-2 不要求运行完整全球星座，而是在目标区域附近直接构造来自多颗卫星的波束簇。TR 38.821 Figure 6.1.4.2-3 用颜色区分卫星，同色波束属于同一颗卫星；可以为简化采用固定轨道倾角，并引入轨道数、每轨卫星数等参数控制区域覆盖。单星仿真的卫星 RF 参数可以直接复用。
 
@@ -1049,7 +760,22 @@ Option-2 不要求运行完整全球星座，而是在目标区域附近直接�
 
 区域布局最适合研究“某个区域在一个或少数代表性时刻受到怎样的多星干扰”。如果只给出静态波束图，它不能自然推出连续覆盖率、卫星进入/离开可见区的时间或长期切换率；若要研究这些量，仍需给每颗卫星加入一致的轨道运动和时间演化模型。
 
-### 4.3 可见卫星与候选波束
+```mermaid
+flowchart TD
+    A[目标区域与 UE 分布] --> B[代表卫星和波束簇]
+    B --> C[期望链路与局部干扰]
+    C --> D[区域 SINR、吞吐量和算法对比]
+```
+
+| 比较项 | Option 1 | Option 2 |
+|---|---|---|
+| 空间范围 | 完整或参考星座 | 局部区域 |
+| 时间演化 | 长时间轨道与服务关系 | 单时刻或短时间，可选简化运动 |
+| 主要输出 | 覆盖连续性、切换和长期干扰 | 局部 SINR、吞吐量和算法对比 |
+| 计算复杂度 | 高 | 低至中 |
+| 主要限制 | 参数量和计算成本高 | 不能自然推断全球覆盖和长期移动性 |
+
+### 3.3 可见卫星与候选波束
 
 对地面 UE \(u\)，位置为 \(\mathbf r_u\)，卫星 \(s\) 的视线单位向量为
 
@@ -1081,7 +807,7 @@ Option-2 不要求运行完整全球星座，而是在目标区域附近直接�
 
 “卫星可见”只说明地球没有遮挡且仰角足够，并不保证链路可用。低仰角卫星可能因斜距、大气损耗或波束边缘增益而弱于另一颗卫星；反过来，高仰角卫星也可能没有在该时刻为该区域开启业务波束。
 
-### 4.4 多速率时间循环
+### 3.4 多速率时间循环
 
 多星 SLS 不必在每个 OFDM 采样点更新整套星座。更合理的是采用多速率时间轴：
 
@@ -1117,7 +843,7 @@ Option-2 不要求运行完整全球星座，而是在目标区域附近直接�
 
 几何时间步长需要由所研究的量决定。以 LEO 轨道速度约 \(7.5\ \mathrm{km/s}\) 为例，100 ms 内卫星沿轨移动约 750 m；对数十公里宽波束的长期覆盖统计，这可能仍可接受，但对波束边缘、快速切换或精确多普勒研究可能过粗。该数值是时间步选择的工程例子，不是 TR 38.821 规定值。正确做法是逐步减小时间步，直到覆盖率、切换次数和吞吐量等结果基本收敛。
 
-### 4.5 服务选择、切换与星间干扰
+### 3.5 服务选择、切换与星间干扰
 
 若复用单星校准假设，UE 可按 RSRP 选择候选卫星和波束：
 
@@ -1153,7 +879,7 @@ I_{u,k}=I_{u,k}^{\mathrm{intra\text{-}sat}}
 
 上行还要在每个干扰波束中选出实际被调度 UE。该 UE 的终端天线通常指向自己的服务卫星，但旁瓣可能被受害卫星接收，因此需要同时计算“干扰 UE 指向其服务卫星的发射增益”和“受害卫星朝向该 UE 的接收增益”。这也是多星上行干扰比简单的波束中心功率叠加更难的原因。
 
-### 4.6 一个双星干扰例子
+### 3.6 一个双星干扰例子
 
 假设 UE 同时可见卫星 A 和 B，并选择 A 的波束为服务链路。在某一 PRB 上：
 
@@ -1174,7 +900,7 @@ I_{u,k}=I_{u,k}^{\mathrm{intra\text{-}sat}}
 
 这个例子说明“另一颗卫星不是服务星”并不代表它可以从仿真中删除。只要波束在相同资源上活动，其干扰就可能比噪声更强，使系统从噪声受限变成干扰受限。
 
-### 4.7 输出指标与方法边界
+### 3.7 输出指标与方法边界
 
 ```{=latex}
 \enlargethispage{2\baselineskip}
