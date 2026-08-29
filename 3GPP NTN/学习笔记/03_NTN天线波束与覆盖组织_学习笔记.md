@@ -1,11 +1,12 @@
 ---
 title: "NTN 天线波束与覆盖组织学习笔记"
 date: "2026-08-26"
-updated: "2026-08-26"
+updated: "2026-08-29"
 sources:
   - "3GPP TR 38.811 V15.4.0"
   - "3GPP TR 38.821 V16.2.0"
   - "3GPP TR 38.901 V16.1.0"
+  - "3GPP TS 38.211 V16.2.0 (Release 16)"
   - "3GPP TS 38.300 V16.17.0"
 ---
 
@@ -257,28 +258,6 @@ Beam footprint 通常近似为椭圆，尤其在波束斜照低仰角区域时�
 
 如果 UE 正好位于波束中心，两条射线重合；如果 UE 偏离中心，两条射线在卫星处形成夹角 \(\theta_{\mathrm{off},i}\)。这个角才是第 \(i\) 个天线方向图的输入。
 
-```{=latex}
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[>=Stealth,scale=0.95]
-  \coordinate (S) at (0,3.5);
-  \coordinate (C) at (-1.25,0.05);
-  \coordinate (U) at (1.15,0.02);
-  \draw[deepblue!70,thick] (-3.4,-0.25) .. controls (-1.8,0.18) and (1.8,0.18) .. (3.4,-0.25);
-  \fill[accentorange] (S) circle (2.5pt) node[above] {卫星 $S$};
-  \fill[deepblue] (C) circle (2.4pt) node[below left] {波束中心 $C_i$};
-  \fill[tealblue] (U) circle (2.4pt) node[below right] {UE：$U$};
-  \draw[->,very thick,accentorange] (S) -- (C) node[midway,left=2pt] {$\mathbf b_i$};
-  \draw[->,very thick,tealblue] (S) -- (U) node[midway,right=2pt] {$\mathbf d$};
-  \draw[accentorange!55,dashed,thick] (S) -- (-2.05,-0.10);
-  \draw[accentorange!55,dashed,thick] (S) -- (-0.45,0.11);
-  \pic[draw=deepblue,thick,"$\theta_{\mathrm{off},i}$",angle eccentricity=1.45,angle radius=9mm] {angle=C--S--U};
-  \node[align=center,font=\small,text=gray!80] at (4.35,1.75) {图中角度被放大\\以便区分两条射线};
-\end{tikzpicture}
-\caption{波束视轴与实际 UE 方向。$\theta_{\mathrm{off},i}$ 表示 UE 相对第 $i$ 个波束峰值方向的偏离。}
-\end{figure}
-```
-
 真实波束离轴角由单位向量点积计算。为与几何篇统一，以下将第 \(i\) 个波束中心轴记为 \(\hat{\boldsymbol b}_i\)，卫星→UE 的 LOS 单位向量记为 \(\hat{\boldsymbol\ell}_{s\rightarrow u}\)：
 
 \[
@@ -345,7 +324,7 @@ TR 38.811 Clause 6.4.1 采用圆孔径参考方向图。设 \(a\) 为孔径半�
 \[
 g(\theta_{\mathrm{off},i})=
 \begin{cases}
-1, & \theta_{\mathrm{off},i}=0,\\[3pt]
+1, & \theta_{\mathrm{off},i}=0,\\
 4\left|\dfrac{J_1(ka\sin\theta_{\mathrm{off},i})}{ka\sin\theta_{\mathrm{off},i}}\right|^2,
 & \theta_{\mathrm{off},i}\ne0,
 \end{cases}
@@ -446,35 +425,7 @@ v(q,r)=v_0+d_{\mathrm{ABS}}\frac{\sqrt{3}}{2}r.
 - 外围波束只用于形成干扰，性能统计只使用内层 19 波束中的 UE；
 - 与服务资源同频、同极化且同时活动的波束才进入实际干扰集合。
 
-```{=latex}
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[scale=0.72]
-  \foreach \q in {-4,...,4}{
-    \foreach \r in {-4,...,4}{
-      \pgfmathtruncatemacro{\s}{-\q-\r}
-      \pgfmathtruncatemacro{\ring}{max(abs(\q),max(abs(\r),abs(\s)))}
-      \ifnum\ring<5
-        \pgfmathsetmacro{\xx}{0.72*(\q+0.5*\r)}
-        \pgfmathsetmacro{\yy}{0.72*0.8660254*\r}
-        \ifnum\ring<3
-          \node[regular polygon,regular polygon sides=6,minimum size=0.69cm,
-                draw=deepblue!85,fill=deepblue!20,inner sep=0pt] at (\xx,\yy) {};
-        \else
-          \node[regular polygon,regular polygon sides=6,minimum size=0.69cm,
-                draw=gray!60,fill=gray!8,inner sep=0pt] at (\xx,\yy) {};
-        \fi
-      \fi
-    }
-  }
-  \node[fill=deepblue!20,draw=deepblue!85,minimum width=0.45cm,minimum height=0.28cm] at (4.8,0.8) {};
-  \node[anchor=west] at (5.15,0.8) {内层 19 波束：统计区域};
-  \node[fill=gray!8,draw=gray!60,minimum width=0.45cm,minimum height=0.28cm] at (4.8,0.15) {};
-  \node[anchor=west] at (5.15,0.15) {附加波束：干扰区域};
-\end{tikzpicture}
-\caption{FRF=1 的附加波束示意。外围波束必须独立计算几何与增益；原理对应 TR 38.821 Figure 6.1.1.1-1。}
-\end{figure}
-```
+因此 wrap-around 的接口是“内层 19 波束负责取样与统计，外围独立波束只扩展干扰集合”。外围波束不能由平面周期平移复制；每个波束仍需独立计算地球曲率下的几何、方向增益和资源活动状态。
 
 **原文定位：**TR 38.821 Table 6.1.1.1-4～6、Figure 6.1.1.1-1～2；TR 38.811 Clause 6.4.1。Table 6.1.1.1-4 直接给出 UV 平面约定、19 波束基线和 ABS 公式；地固位置到单位方向、真实离轴角以及一阶 UV 度量是对仿真实现过程的展开说明。
 
@@ -574,7 +525,7 @@ TR 38.821 Clause 6.2.4 讨论了频率复用因子大于 1 时“一波束一 BW
 
 #### 3.4.2 SSB/CSI-RS、波束与小区的管理层级
 
-波束描述空间收发方向，小区描述一套接入、广播、调度和移动性管理配置。一个小区可以包含多个 SSB 或 CSI-RS 波束，同一小区内的多个 SSB 波束具有相同 PCI 和基本系统信息，通过 SSB index 区分方向。UE 从一个 SSB 波束切到另一个波束，只要 PCI 和服务小区上下文不变，通常属于小区内波束切换。
+波束描述空间收发方向，小区描述一套接入、广播、调度和移动性管理配置。一个小区可以包含多个 SSB 或 CSI-RS 波束；同一小区内的 SS/PBCH blocks 共享 PCI 和服务小区的 MIB/RRC 广播上下文，但各 SS/PBCH block 仍携带 SSB index、定时相关信息以及相应的 PBCH/DM-RS 内容，不能笼统表述为“所有基本系统信息完全相同”。UE 从一个 SSB 波束切到另一个波束，只要 PCI 和服务小区上下文不变，通常属于小区内波束切换。
 
 | UE 观察到的主要变化 | 操作性质 |
 |---|---|
@@ -586,7 +537,7 @@ TR 38.821 Clause 6.2.4 讨论了频率复用因子大于 1 时“一波束一 BW
 
 物理波束也可承载多个 CC、BWP 或频率层小区，因此物理波束、波束足迹和 NR 小区之间不存在固有的一一对应关系。
 
-> **原文定位：**TS 38.300 Clause 9.2.4。
+> **原文定位：**TS 38.211 Clauses 7.4.1.4、7.4.3；TS 38.300 Clause 9.2.4。
 
 #### 3.4.3 NTN 小区映射与联合状态
 
