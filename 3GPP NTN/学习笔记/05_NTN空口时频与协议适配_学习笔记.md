@@ -1,7 +1,7 @@
 ---
 title: "NTN 空口时频与协议适配学习笔记"
 date: "2026-08-26"
-updated: "2026-08-28"
+updated: "2026-08-29"
 sources:
   - "3GPP TR 38.811 V15.4.0"
   - "3GPP TR 38.821 V16.2.0"
@@ -768,7 +768,24 @@ TR 38.821 讨论过多个 Layer 3 滤波系数、按波束配置功控参数、�
 
 ### 3.1 NTN 随机接入与初始 TA
 
-随机接入把上游的传播时延、差分时延、残余 CFO 和时间参考具体化为 Msg1 检测、Msg2 监测、Msg3 调度和上行对齐问题。其核心不是把一个 TA 字段无限扩大，而是重组初始时延预测、网络细化和跨 DL-UL 调度。
+随机接入把上游的传播时延、差分时延、残余载波频率偏移（Carrier Frequency Offset，CFO）和时间参考具体化为 Msg1 检测、Msg2 监测、Msg3 调度和上行对齐问题。其核心不是把一个 TA 字段无限扩大，而是重组初始时延预测、网络细化和跨 DL-UL 调度。
+
+从实现角度，应把随机接入看成两条同时收敛的估计链：
+
+\[
+\begin{aligned}
+\text{时间链：}&\quad
+\text{Common TA}
++\text{Differential TA}
++\text{Residual correction},\\
+\text{频率链：}&\quad
+\text{公共多普勒补偿}
++\text{UE-specific 多普勒补偿}
++\text{Residual CFO estimation}.
+\end{aligned}
+\]
+
+只有两条链都进入 PRACH 接收机的捕获范围，相关峰、RO 标签和后续 Msg3 时间线才同时可信。
 
 #### 3.1.1 四步随机接入与初始 TA
 
@@ -793,7 +810,16 @@ TR 38.821 讨论过多个 Layer 3 滤波系数、按波束配置功控参数、�
 | 有位置与星历能力 | UE 根据位置、星历及必要的网关信息自主计算 Full TA 或服务链路 TA | 修正 UE 估计的 residual error |
 | 无位置能力 | 网络广播相对参考点的 Common TA 或时间偏移 | 给出 UE-specific differential/residual TA |
 
-UE 自主计算时：
+四步过程中的 UE 与网络知识状态并不相同：
+
+| 阶段 | UE 已知或应用的量 | 网络从接收中可知的量 | 尚未闭合的问题 |
+|---|---|---|---|
+| Msg1 前 | 下行时频基准、广播辅助量、自主估计的 TA/CFO | 波束/小区级公共参考 | UE 估计误差尚未知 |
+| Msg1 到达 | UE 已按自身估计提前发送 | 前导、到达误差、残余 CFO、候选 RO | 到达误差不等于 UE 已应用的绝对 TA |
+| Msg2/RAR | 接收 TA correction 与 UL grant | 可通知检测结果和细化量 | Msg3 调度仍可能缺少 UE 绝对 UL timeline |
+| Msg3 到达 | 已应用粗 TA 与 RAR correction | 可联合 Msg3 信息建立更完整 TA 状态 | 转入后续 TA/CFO 维护 |
+
+UE 自主计算服务链路几何时：
 
 \[
 \hat D_x(t)
@@ -809,7 +835,39 @@ UE 自主计算时：
 \frac{2\hat D_x(t)}{c}.
 \]
 
-RAR 中的 TA 更接近细化量：
+这里 GNSS 只给出 UE 的位置和时间基准，并不会直接“输出 TA”。UE 还需要卫星星历、参考时刻以及透明转发场景所需的网关位置或馈电链路时延。对同一波束参考点 \(r\) 和 UE \(u\)，可写为：
+
+\[
+\tau_u(t)
+=
+\tau_r(t)
++
+\Delta\tau_{\mathrm{geo},u}(t),
+\]
+
+\[
+e_{\tau,u}
+=
+\left[
+\tau_u-\tau_r
+-
+\widehat{\Delta\tau}_{\mathrm{geo},u}
+\right]
++b_t,
+\]
+
+其中 \(b_t\) 汇总 UE 时钟、星历时效、位置误差、公共参考误差和未建模馈电时延。频率侧有对应分解：
+
+\[
+\delta f_u
+=
+\left(f_{D,u}-f_{D,r}\right)
+-
+\widehat{\Delta f}_{D,u}
++b_f.
+\]
+
+Common TA 是同一波束/小区内相对参考点共享的传播分量，不是“整条卫星 RTT 的另一个名字”。对再生载荷，可把参考点至卫星的分量作为公共参考；对透明载荷，还要明确馈电链路由 UE 估计、网络广播还是网络侧补偿。RAR 中的 TA 因而更接近残余细化量：
 
 \[
 \Delta T_{\mathrm{TA}}
@@ -821,9 +879,70 @@ T_{\mathrm{TA,true}}
 
 由于 UE 可能低估或高估初始 TA，细化量在物理上可能向两个方向修正。
 
+> **工程判断：**GNSS 失效并不只会造成“TA 变差”。它会同时放大 PRACH 接收窗、残余 CFO 搜索范围和跟踪环初始误差；若网络仍广播 Common TA，UE 可以退化为“公共分量 + 网络细化”，但可支持的波束尺寸、RO 密度和接入时延需要重新核算。
+
 > **原文定位：**TR 38.811 Clauses 7.3.4.1-7.3.4.2；TR 38.821 Clauses 6.3.4、7.2.1.1.1.2，Figures 7.2.1.1.1.2-8 至 7.2.1.1.1.2-9。38.811 识别原机制范围问题，38.821 研究 Common TA、UE autonomous TA 和 network refinement；两者的标准状态不同。
 
-#### 3.1.2 PRACH 检测窗口与 RO 模糊
+#### 3.1.2 PRACH 序列、相关检测与保护区
+
+NR PRACH 前导基于 Zadoff-Chu（ZC）根序列及其循环移位构造。为突出 NTN 中的物理含义，可用简化形式表示根序列：
+
+\[
+x_u[n]
+=
+\exp\!\left(
+-j\frac{\pi u n(n+1)}{N_{\mathrm{ZC}}}
+\right),
+\qquad 0\le n<N_{\mathrm{ZC}},
+\]
+
+同一根 \(u\) 上第 \(v\) 个前导可写为：
+
+\[
+x_{u,v}[n]
+=
+x_u\!\left[
+(n+C_v)\bmod N_{\mathrm{ZC}}
+\right],
+\qquad
+C_v=vN_{\mathrm{CS}},
+\]
+
+其中 \(N_{\mathrm{CS}}\) 表示 ZC 序列索引域中的循环移位间隔，并不是采样率、CP 长度或 TA 步长。配置较大的 \(N_{\mathrm{CS}}\) 会扩大零相关区，但同一根可生成的可用前导数相应下降；若所需前导数量超过单根可提供的数量，就需要继续使用其他根序列。
+
+在存在到达时延 \(n_\tau\) 和归一化 CFO \(\epsilon\) 时，接收序列可写为：
+
+\[
+r[n]
+=
+\alpha x_{u,v}[n-n_\tau]
+\exp\!\left(j\frac{2\pi\epsilon n}{N_{\mathrm{ZC}}}\right)
++w[n].
+\]
+
+接收机对候选根、循环移位、时延和频偏进行联合或分级搜索，例如：
+
+\[
+R_{u,v}[m]
+=
+\left|
+\sum_n r[n]x_{u,v}^{*}[n-m]
+\right|^2.
+\]
+
+理想零 CFO 下，循环移位把不同前导的相关峰分隔开；残余 CFO 会使相关能量泄漏、峰值降低或出现根相关的错误候选。于是 NTN PRACH 检测至少有三种不同的失败模式：
+
+| 失败模式 | 物理原因 | 典型后果 | 主要控制量 |
+|---|---|---|---|
+| 循环移位混淆 | 到达时延越过零相关区或落入另一前导的移位区域 | preamble index 误判 | \(N_{\mathrm{CS}}\)、restricted set、残余时延 |
+| 频偏引起的相关失真 | 残余 CFO 破坏理想 ZC 相关特性 | 峰值损失、假峰、检测率下降 | 预补偿、频偏搜索、SCS、重复 |
+| RO 标签混淆 | 相邻 RO 的接收窗口在绝对时间上重叠 | 同一前导无法唯一关联发送 RO | RO 间隔、前导分组、显式时频标签 |
+
+受限集合（restricted set）从循环移位集合中选择对高速或多普勒条件更稳健的组合，它处理的是“同一根上的序列可分辨性”；它不会自动消除公共绝对时延，也不会替代 RO 标签设计。类似地，CP 保护的是一个 PRACH 格式内部的时间不确定性和多径扩展，RAR TA 调整的是后续上行发射时刻，二者都不能单独证明 RO 归属。
+
+> **标准状态：**TR 38.821 Clause 6.3.3 在“UE 不做时频预补偿”的假设下研究了更大 SCS、重复、多 ZC 根、Gold/m 序列和附加 scrambling 等候选；报告要求在规范阶段继续筛选，不能把这些候选全部写成现网必选特性。ZC 生成、根序列和 restricted set 的规范定义见 TS 38.211 Clause 6.3.3.1。
+
+#### 3.1.3 PRACH 接收窗口与 RO 模糊
 
 对同一波束内第 \(i\) 个 UE：
 
@@ -843,11 +962,16 @@ T_{\mathrm{TA,true}}
 | RAR监测窗口 | UE何时等待Msg2 | 上下行传播、处理调度和剩余不确定性 |
 | RAR中的TA | 如何把到达误差通知UE | TA范围、粒度和公共参考 |
 
-若所有 UE 使用同一个 RACH Occasion（RO），接收窗口至少需要覆盖：
+若所有 UE 使用同一个 RACH Occasion（RO），网络接收窗至少需要覆盖最早与最晚到达者。TR 38.821 使用往返对齐关系描述时，接收窗跨度与小区内最大单程差分时延的两倍相关：
 
 \[
-[\tau_{\min},\tau_{\max}].
+W_{\mathrm{rx}}
+\gtrsim
+2(\tau_{\max}-\tau_{\min})
++W_{\mathrm{res}},
 \]
+
+其中 \(W_{\mathrm{res}}\) 包含预补偿残差、接收机搜索余量和实现裕量。
 
 当差分范围大于相邻 RO 间隔时：
 
@@ -870,6 +994,17 @@ gNB 检测到 Zadoff-Chu 前导后可能无法确定它属于哪个发送 RO，�
 
 因此 beam footprint 不只是覆盖参数，它还通过差分距离约束 PRACH 搜索范围、RO 间隔和前导检测复杂度。
 
+TR 38.821 给出的研究解法揭示了几种互不等价的资源权衡：
+
+| 方法 | 如何增加 RO 可识别性 | 代价或边界 |
+|---|---|---|
+| 拉大相邻 RO 时间间隔 | 接收窗不再重叠 | 降低单位时间接入机会数 |
+| 给邻近 RO 分配不同前导组 | 用 preamble group 携带 RO 标签 | 每个 RO 的有效前导数下降 |
+| 在不同频带发送/跳频 | 用接收频带辅助判断 RO | 需要显式配置与接收机支持；研究候选并非自动能力 |
+| MsgA 携带 SFN/时间辅助 | 数据部分显式说明发送时刻 | 依赖两步接入且 MsgA PUSCH 需先可解调 |
+
+“频域复用多个 RO”与“一个前导做频率跳变”也要分开：前者直接增加接入机会数，后者提供多个频率观察或标签。跳频可能帮助区分 CFO、时延或相邻 RO，但不会凭空增加 ZC 正交签名数，也不能在没有映射规则时自动消除歧义。
+
 TR 以 200 km 小区半径评估差分距离：
 
 | 最低仰角 | 参考差分距离 |
@@ -884,7 +1019,7 @@ TR 以 200 km 小区半径评估差分距离：
 
 > **原文定位：**TR 38.811 Clause 7.3.4.1.1、Figure 7.3.4.1.1-1、Table 7.3.4.1.2-1；TR 38.821 Clause 7.2.1.1.1.2、Figures 7.2.1.1.1.2-1 至 7.2.1.1.1.2-2、Table 7.2.1.1.1.2-1。
 
-#### 3.1.3 RAR 监测与 Msg3 调度
+#### 3.1.4 RAR 监测与 Msg3 调度
 
 从 UE 发送 Msg1 到接收 Msg2 的时间为：
 
@@ -933,9 +1068,59 @@ n_{\mathrm{RAR}}
 
 其中 \(\Delta\) 表示首次 Msg3 PUSCH 的附加处理时间。
 
+把知识状态写成估计量更直观。若 UE 实际应用的初始 TA 为 \(T_{\mathrm{app}}\)，网络从 Msg1 相关峰只直接观测到到达误差 \(e_{\mathrm{arr}}\)：
+
+\[
+e_{\mathrm{arr}}
+=
+T_{\mathrm{true}}
+-T_{\mathrm{app}}
++e_{\mathrm{det}}.
+\]
+
+网络可在 RAR 中发送 \(e_{\mathrm{arr}}\) 的量化修正，却不能仅凭该差值唯一反推出 \(T_{\mathrm{app}}\)。直到 UE 显式报告或 Msg3 让网络建立完整时间状态之前，Msg3 grant 需要保守覆盖剩余不确定性。这也是“RAR TA 可修正 Msg1 到达”与“网络知道 UE 绝对 TA”不可等同的原因。
+
 > **原文定位：**TR 38.811 Clause 7.3.4.1.2；TR 38.821 Clauses 6.2.1、7.2.1.1.1.2，Figures 7.2.1.1.1.2-3、7.2.1.1.1.2-9。RAR window start、绝对 TA 知识和 Msg3 调度应分别核算。
 
-#### 3.1.4 TA 范围与波束尺寸
+#### 3.1.5 RACH 容量、碰撞与 SSB 分区
+
+若每秒有 \(N_t\) 个时域 RO、每个时刻配置 \(N_f\) 个频域 RO，并且每个 RO 对某类 UE 实际可用的 contention-based 前导数为 \(M_{\mathrm{eff}}\)，则简化签名空间为：
+
+\[
+N_{\mathrm{opp}}=N_tN_f,
+\qquad
+S=N_{\mathrm{opp}}M_{\mathrm{eff}}.
+\]
+
+当 \(U\) 个 UE 独立、均匀选择这 \(S\) 个资源签名时，某个 UE 至少与另一个 UE 碰撞的概率为：
+
+\[
+P_{\mathrm{col}}
+=
+1-\left(1-\frac{1}{S}\right)^{U-1},
+\]
+
+单轮期望成功数近似为：
+
+\[
+\mathbb E[N_{\mathrm{succ}}]
+=
+U\left(1-\frac{1}{S}\right)^{U-1}.
+\]
+
+这里 \(M_{\mathrm{eff}}\) 通常小于“协议上最多 64 个前导”的口头值，因为还要扣除无竞争接入、SI request、不同 SSB 的前导分区、restricted set/root 设计及接收机可可靠区分的候选。多使用根序列可以凑足配置前导，不意味着在接收机处理预算、RO 数量都不变时容量必然等比例增长。
+
+TS 38.331 的 `ssb-perRACH-OccasionAndCB-PreamblesPerSSB` 同时配置每个 RO 关联的 SSB 数，以及每个 SSB 的 contention-based preamble 数。其容量含义是：
+
+- 一个 SSB 可映射到多个 RO：给该波束更多接入机会，但消耗更多时频资源；
+- 多个 SSB 共享一个 RO：节省 RO，但需要按 SSB 切分前导，且热点波束更容易碰撞；
+- 总有效容量必须同时看 RO 密度、频域复用、每 SSB 前导数和 RO 歧义保护，不能只看单个字段。
+
+例如，将 RO 时间间隔拉大以消除 NTN 差分时延歧义，会直接降低 \(N_t\)；再把一个 RO 分给多个 SSB，又会降低每个 SSB 的 \(M_{\mathrm{eff}}\)。这解释了为什么大波束、无 GNSS 接入和高并发三者不能无代价兼得。
+
+> **原文定位：**TR 38.821 Clauses 7.2.1.1.1.1-7.2.1.1.1.2；TS 38.331 RACH-ConfigCommon 的 totalNumberOfRA-Preambles、restrictedSetConfig 与 ssb-perRACH-OccasionAndCB-PreamblesPerSSB 字段。上式是便于设计核算的均匀选择近似，不代替 3GPP 的具体业务到达模型。
+
+#### 3.1.6 TA 范围与波束尺寸
 
 TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 
@@ -959,7 +1144,7 @@ TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 
 > **原文定位：**TR 38.811 Clauses 7.3.4.2.1-7.3.4.2.3，Tables 7.3.4.2.1-1、7.3.4.2.2-1。表格是研究评估参考，后续版本 NTN TA 的规范机制应以对应 TS 为准。
 
-#### 3.1.5 两步随机接入的时间信息
+#### 3.1.7 两步随机接入的时间信息
 
 两步随机接入把前导与上行数据合并为：
 
@@ -971,9 +1156,19 @@ TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 \text{PUSCH payload}.
 \]
 
-从 TA 角度，它允许 UE 在更早阶段向网络报告已应用的初始 TA 或相关辅助信息，使网络更早建立对 UE 绝对 UL 时间基准的认知，减少四步随机接入中“Msg1 已对齐但网络仍不知道 UE 已应用多少 TA”的调度不确定性。
+网络随后在 MsgB 中完成响应和竞争解决。从 TA 角度，MsgA 的 PUSCH payload 允许 UE 在更早阶段报告已应用的初始 TA 或相关辅助信息，使网络更早建立对 UE 绝对 UL 时间基准的认知，减少四步随机接入中“Msg1 已对齐但网络仍不知道 UE 已应用多少 TA”的调度不确定性。
 
-两步随机接入不会消除 MsgA 的传播时间，也不会自动解决残余 CFO、PRACH 窗口和竞争冲突；其价值主要在于更早交换时间状态。该内容属于 TR 38.821 对 NTN 随机接入候选方案的研究，不应写成所有 NTN UE 必须使用两步随机接入。
+但 MsgA 中的 PUSCH 比纯前导更依赖可用的初始时间和频率补偿：若 UE 的预补偿误差已经使 PUSCH 超出 CP、DM-RS 或接收机频偏容限，网络就无法读取“我应用了多少 TA”这条辅助信息。因此两步随机接入不会消除 MsgA 的传播时间，也不会自动解决残余 CFO、PRACH 窗口和竞争冲突；它减少消息往返并提前交换时间状态，却对 MsgA 前的初始同步质量提出更直接要求。
+
+| 比较项 | 四步随机接入 | 两步随机接入 |
+|---|---|---|
+| 首次上行 | Msg1：PRACH 前导 | MsgA：PRACH + PUSCH |
+| 网络首次获得 UE 数据 | Msg3 | MsgA |
+| 已应用 TA 的报告时机 | Msg3 或后续状态建立 | 可在 MsgA PUSCH 中提前报告 |
+| 初始预补偿要求 | PRACH 必须可检测 | PRACH 可检测且 PUSCH 可解调 |
+| NTN 主要收益 | 基线流程成熟 | 减少往返并降低 Msg3 调度未知量 |
+
+该内容属于 TR 38.821 对 NTN 随机接入候选方案的研究，不应写成所有 NTN UE 必须使用两步随机接入。
 
 > **原文定位：**TR 38.821 Clause 7.2.1.1.2、Figures 7.2.1.1.2-1 至 7.2.1.1.2-2；相关 TA 框架见 Clause 6.3.4。具体两步随机接入字段和规范行为应以相应 TS 版本为准。
 
@@ -981,7 +1176,29 @@ TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 
 同步信号块（Synchronization Signal Block，SSB）包含主同步信号（Primary Synchronization Signal，PSS）、辅同步信号（Secondary Synchronization Signal，SSS）和物理广播信道（Physical Broadcast Channel，PBCH）。UE 通过 PSS/SSS 完成初始时频同步和物理小区标识检测，再解调 PBCH 获得主信息块及继续读取系统信息所需的基础配置。
 
-#### 3.2.1 原始多普勒与同步捕获
+#### 3.2.1 PSS、SSS、PBCH 与 SSB index
+
+一次 SSB 候选检测不是单一相关操作，而是一条逐步缩小假设空间的链：
+
+| 组成 | 主要任务 | 典型输出 | 不能单独提供 |
+|---|---|---|---|
+| PSS | 粗符号定时、粗频偏、\(N_{\mathrm{ID}}^{(2)}\) | 3 个扇区内身份候选之一 | 完整 PCI、系统信息 |
+| SSS | 帧内同步细化、\(N_{\mathrm{ID}}^{(1)}\) | 与 PSS 合成 PCI | 星历、Common TA |
+| PBCH DM-RS | PBCH 信道估计、细同步与 SSB index 相关判决 | PBCH 解调条件、SSB 候选识别 | 完整 NTN 接入配置 |
+| PBCH/MIB | 最小系统信息与 SIB1 入口 | 帧结构基础量、CORESET#0/SearchSpace#0 入口 | 全部 PRACH/NTN 辅助参数 |
+
+物理小区标识由 PSS/SSS 的两部分组成：
+
+\[
+N_{\mathrm{ID}}^{\mathrm{cell}}
+=
+3N_{\mathrm{ID}}^{(1)}
++N_{\mathrm{ID}}^{(2)}.
+\]
+
+SSB index 与 PCI 不是同一变量。一个 PCI 下可以有多个 SSB index，对应不同发送时刻和实现相关的波束方向；多个 SSB/波束可以共享同一 PCI。UE 检出 PCI 后仍需借助 PBCH DM-RS、PBCH 信息和配置确定候选 SSB 及其后续接入资源。
+
+#### 3.2.2 原始多普勒、二维搜索与同步捕获
 
 TR 使用地面 UE 约 5 ppm 初始频偏鲁棒性作为比较基线：
 
@@ -997,6 +1214,20 @@ TR 使用地面 UE 约 5 ppm 初始频偏鲁棒性作为比较基线：
 
 600 km LEO 的参考最大原始多普勒在 2 GHz 和 20 GHz 分别约为 ±48 kHz 和 ±480 kHz，均高于对应数值。如果 UE 在完全未知多普勒条件下直接搜索 PSS/SSS，地面 NR 的单次捕获范围可能不足。
 
+对一个候选同步序列 \(s[n]\)，接收机实际进行的是时间—频率二维搜索：
+
+\[
+C(\hat\tau,\hat f)
+=
+\left|
+\sum_n
+r[n]s^*[n-\hat\tau]
+e^{-j2\pi\hat f nT_s}
+\right|^2.
+\]
+
+搜索范围越大，候选栅格、计算量、虚警控制和捕获时间越高。NTN 的关键不是只提高某个相关器门限，而是先用几何与网络补偿缩小 \((\hat\tau,\hat f)\) 的先验范围。
+
 但同步判据应使用预补偿后的残余量：
 
 \[
@@ -1011,9 +1242,68 @@ f_D
 
 波束中心公共预补偿、UE 位置、卫星星历和后续频偏估计都可以缩小搜索范围。因此大原始多普勒不必然要求修改同步信号；只有残余范围仍超出捕获能力时，才需要扩大搜索、增加辅助信息或研究同步增强。TR 38.821 的评估进一步观察到：GEO 以及采用波束级公共频移预补偿的 LEO 可以复用 Rel-15 SSB；LEO 若不做频移预补偿，UE 接收机需要增加搜索复杂度，但报告仍未识别出修改 SSB 波形的必要性。
 
+完整捕获链可整理为：
+
+\[
+\begin{aligned}
+\text{raw satellite Doppler}
+&\rightarrow
+\text{network/beam common pre-compensation}\\
+&\rightarrow
+\text{UE GNSS/ephemeris prediction}
+\rightarrow
+\text{PSS coarse CFO}\\
+&\rightarrow
+\text{SSS/PBCH DM-RS fine tracking}
+\rightarrow
+\text{PRACH residual CFO}.
+\end{aligned}
+\]
+
+SSB 同步与 Msg1 发送之间还存在信息老化。若两者相隔 \(T_{\mathrm{age}}\)，一阶近似为：
+
+\[
+\delta f_{\mathrm{Msg1}}
+\approx
+\delta f_{\mathrm{sync}}
++\dot f_D T_{\mathrm{age}}
++b_f,
+\]
+
+\[
+e_{\tau,\mathrm{Msg1}}
+\approx
+e_{\tau,\mathrm{sync}}
++\dot\tau T_{\mathrm{age}}
++b_t.
+\]
+
+所以“SSB 已捕获”并不等于“PRACH 一定在窗内”。实现仍要考虑 SIB1 读取时间、RO 等待时间、卫星运动和本振漂移，并在 Msg1 前更新 TA/CFO 预测。
+
 > **原文定位：**TR 38.811 Clause 7.3.2.3；TR 38.821 Clause 6.3.2。报告中约 13,000 km 的高度判断来自特定 5 ppm 与最大几何多普勒比较，不是通用部署门限。
 
-#### 3.2.2 SSB、PBCH 与系统信息边界
+#### 3.2.3 波束扫描、SSB 选择与 SSB-to-RO 映射
+
+在波束扫描部署中，一个 SSB burst set 可在不同 SSB index 上发送多个候选波束。UE 对可检测 SSB 测量 SSB-RSRP，并根据门限与选择规则确定候选 SSB；网络再通过 SSB-to-RO 映射把该选择带入随机接入。
+
+TS 38.331 的 RACH-ConfigCommon 同时提供 rsrp-ThresholdSSB 和 ssb-perRACH-OccasionAndCB-PreamblesPerSSB。后一个字段包含两个维度：
+
+1. 一个 RO 对应多少个 SSB，或一个 SSB 分散到多少个 RO；
+2. 每个 SSB 分配多少个 contention-based preamble。
+
+因此 gNB 可以从“在哪个 RO、检测到哪个前导集合”反推出 UE 选择的 SSB/候选波束，而不必在 Msg1 中显式发送完整波束编号。该映射也形成资源—碰撞权衡：
+
+| 映射方式 | 波束识别 | 资源效率 | 碰撞/热点影响 |
+|---|---|---|---|
+| 一个 SSB 对多个 RO | 识别直接 | 占用更多 RO | 单波束机会增加 |
+| 一个 SSB 对一个 RO | 关系简单 | 中等 | 取决于每 SSB 前导数 |
+| 多个 SSB 共享一个 RO | 依靠前导分区识别 | 节省 RO | 每 SSB 可用前导减少，热点更敏感 |
+
+NTN 中还要叠加第 3.1.3 节的 RO 接收窗重叠问题。即使 SSB-to-RO 配置在逻辑上唯一，若长差分时延使相邻 RO 在网络侧不可分，物理到达仍会破坏该映射。因此 SSB/RO 配置、波束足迹和 Common/Differential TA 需要联合设计。
+
+> **跨笔记边界：**SSB 波束扫描方式、卫星波束与 PCI/小区组织由[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)展开；本节只保留 SSB 选择进入 PRACH 资源映射的接口。
+
+#### 3.2.4 SSB、PBCH 与系统信息边界
 
 SSB 的物理层任务是提供同步、物理小区标识、SSB index 相关信息和 PBCH 解调入口。星历、Common TA、timing drift rate 或其他 NTN 辅助量是否以及如何通过系统信息提供，属于更高层配置问题，不能笼统写成“SSB 本身携带全部 NTN 辅助信息”。
 
@@ -1022,14 +1312,49 @@ SSB 的物理层任务是提供同步、物理小区标识、SSB index 相关信
 | 输入 | 作用 | 获得层面 |
 |---|---|---|
 | 下行符号与帧时间 | 建立接收时间基准 | PSS/SSS/PBCH |
-| 物理小区标识与SSB index | 关联候选波束和PRACH资源 | PSS/SSS、PBCH和配置 |
+| PCI | 识别物理小区 | PSS/SSS |
+| SSB index 与 PBCH 解调条件 | 识别候选 SSB/波束并读取 MIB | PBCH DM-RS、PBCH |
 | 粗频偏估计 | 缩小残余 CFO | PSS/SSS及接收机估计 |
-| PRACH资源关联 | 选择RO和前导资源 | 系统信息与SSB-to-RO配置 |
+| SIB1 读取入口 | 获取初始接入所需配置 | PBCH/MIB 指向 CORESET#0/SearchSpace#0 |
+| PRACH资源关联 | 选择RO和前导资源 | SIB1/RRC中的RACH与SSB-to-RO配置 |
 | 星历、Common TA或漂移辅助 | Msg1前TA/多普勒预补偿 | NTN系统信息或其他配置，取决于标准版本 |
+| UE位置与本地时间 | 形成几何预测输入 | UE GNSS/其他定位能力，不属于 SSB |
 
 这一分层避免把同步信号、广播信道和 RRC 系统信息混成同一对象。
 
-#### 3.2.3 测量与后续消费者
+#### 3.2.5 从 SSB 到 Msg1 的状态传递与失败定位
+
+SSB 到 RACH 的物理顺序可压缩为：
+
+\[
+\begin{aligned}
+\text{PSS/SSS detection}
+&\rightarrow
+\text{PCI + coarse time/frequency}
+\rightarrow
+\text{PBCH/MIB}\\
+&\rightarrow
+\text{SIB1/RACH configuration}
+\rightarrow
+\text{SSB/RO/preamble selection}\\
+&\rightarrow
+\text{TA/CFO prediction update}
+\rightarrow
+\text{Msg1}.
+\end{aligned}
+\]
+
+用失败现象反推环节时，可按下表排查：
+
+| 现象 | 优先怀疑 | 不应直接归因于 |
+|---|---|---|
+| PSS 峰始终不稳定 | 原始/残余 CFO 超范围、搜索栅格、低 SNR | PRACH TA 命令 |
+| PCI 可得但 PBCH 失败 | 精频偏、信道估计、SSB index 假设 | SSB-to-RO 碰撞 |
+| SIB1 可读但 Msg1 无检测 | TA/CFO 老化、PRACH 功率、RO 选择、前导检测 | “SSB 波形必然要改” |
+| Msg1 有峰但 RO 不确定 | 差分时延造成接收窗重叠 | 单纯扩大 CP |
+| Msg2 可收但 Msg3 调度困难 | 网络缺少 UE 已应用的绝对 TA | PSS/SSS PCI 检测 |
+
+#### 3.2.6 测量与后续消费者
 
 SSB-RSRP 可进入波束测量、Layer 3 滤波和路径损耗估计。其消费者分属不同笔记和章节：波束候选与小区组织由[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)负责；RSRP 滤波和 PUSCH 功控由第 2.6 节负责；SSB-to-RO 关联、粗频偏和时间参考则进入第 3.1 节的随机接入。
 
