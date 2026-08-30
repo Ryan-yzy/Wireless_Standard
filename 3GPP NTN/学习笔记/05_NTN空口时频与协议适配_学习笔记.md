@@ -1,15 +1,16 @@
 ---
 title: "NTN 空口时频与协议适配学习笔记"
 date: "2026-08-26"
-updated: "2026-08-29"
+updated: "2026-08-30"
 sources:
   - "3GPP TR 38.811 V15.4.0"
   - "3GPP TR 38.821 V16.2.0"
-  - "3GPP TS 38.211 Release 16"
-  - "3GPP TS 38.213 V16.3.0"
-  - "3GPP TS 38.214 V16.7.0"
-  - "3GPP TS 38.300 V16.17.0"
-  - "3GPP TS 38.331 V16.18.0"
+  - "3GPP TS 38.211 V16.2.0 (Release 16)"
+  - "3GPP TS 38.213 V17.13.0"
+  - "3GPP TS 38.214 V17.13.0"
+  - "3GPP TS 38.300 V17.8.0"
+  - "3GPP TS 38.321 V17.13.0"
+  - "3GPP TS 38.331 V17.13.0"
 ---
 
 # NTN 空口时频与协议适配学习笔记
@@ -18,22 +19,25 @@ sources:
 
 | 主章节 | 核心对象 | 判断尺度 | 主要来源 |
 |---|---|---|---|
-| 1 系统级空口时频与波形约束 | TA、残余 CFO、SCS、DM-RS、PT-RS、CP、双工与波形 | 波形、符号、时隙和收发切换 | TR 38.811 Clauses 7.3.2、7.3.5-7.3.7 |
-| 2 测量、反馈与控制闭环 | TA/频偏维护、\(K_{\mathrm{offset}}\)、HARQ/RLC、CSI/CQI、MCS与功控 | 测量到执行的闭环时间 | TR 38.811 Clause 7.3.3、TR 38.821 Clause 6.2 |
-| 3 初始接入、同步与状态迁移 | PRACH/RAR/Msg3、两步随机接入、PSS/SSS/PBCH与服务状态迁移 | 消息序列、监测窗口和状态转换 | TR 38.811 Clauses 7.3.2.3、7.3.4，TR 38.821 Clauses 6.3、7.2.1.1 |
+| 1 系统级空口时频与波形约束 | TA、残余 CFO、SCS、DM-RS、PT-RS、CP、双工与波形 | 波形、符号、时隙和收发切换 | TR 38.811 Clauses 7.3.2、7.3.5-7.3.7，TR 38.821 Clause 6.1.2 |
+| 2 测量、反馈与控制闭环 | TA/频偏维护、\(K_{\mathrm{offset}}\)、HARQ/RLC、CSI/CQI、MCS与功控 | 测量到执行的闭环时间 | TR 38.821 Clauses 6.2-6.4，TS 38.300/38.321/38.331 Rel-17 NTN机制 |
+| 3 下行同步、系统信息与随机接入 | PSS/SSS、SSB/PBCH、SIB1/SIB19、PRACH/RAR/Msg3与联合空口状态 | 捕获、广播、接入消息和状态转换 | TR 38.821 Clauses 6.3、7.2.1.1，TS 38.300 Clause 16.14，TS 38.331 Rel-17系统信息 |
 
 全文按以下知识链组织：
 
 \[
-\text{几何与信道输入}
+\begin{aligned}
+&\text{几何与信道输入}
 \rightarrow
 \text{系统级波形约束}
 \rightarrow
-\text{测量反馈闭环}
+\text{测量反馈闭环},\\
+&\text{PSS/SSS与SSB捕获}
 \rightarrow
-\text{RACH/SSB过程}
+\text{SIB1/SIB19与RACH过程}
 \rightarrow
 \text{协议与仿真状态}.
+\end{aligned}
 \]
 
 其中有三组量必须首先分开。对第 \(x\) 个 UE，定时提前量（Timing Advance，TA）可写成：
@@ -172,21 +176,31 @@ T_{\mathrm{diff},x}
 
 > **原文定位：**TR 38.821 Clause 6.2.1、Figures 6.2.1-1 和 6.2.1-2。两图讨论的是不同 DL/UL 时间架构及其调度影响。
 
-#### 1.2.3 TA、SCS 与跨时隙调整
+#### 1.2.3 时间参考与馈电链路切换
 
-TR 38.811 以最大约 \(35\,\mu\mathrm{s/s}\) 的时延漂移评估 TA 更新。不同子载波间隔（Subcarrier Spacing，SCS）下，TA 量化步长和单次允许更新量不同：
+TA 参考不是只由服务链路决定。透明转发架构中，公共部分还经过馈电链路；若馈电链路从一个 Gateway/卫星连接切换到另一个连接，公共传播时延、频率变换链和网络侧 DL/UL 时间关系都可能变化。UE 即使仍处于同一逻辑小区和地面覆盖区域，也可能需要更新 Common TA、公共频率预补偿和跨 DL-UL 逻辑偏移。
 
-| SCS | 时隙长度 | TA量化步长 | 报告估计的单次最大调整 | 跟踪最大漂移的命令量级 |
-|---:|---:|---:|---:|---:|
-| 15 kHz | 1 ms | 520.83 ns | 约16.6 μs | 约10次/s |
-| 30 kHz | 0.5 ms | 260.42 ns | 约8.3 μs | 数十次/s量级 |
-| 60 kHz | 0.25 ms | 130.21 ns | 约4.15 μs | 约40次/s |
-| 120 kHz | 0.125 ms | 65.10 ns | 约2.1 μs | 约80次/s |
-| 240 kHz | 0.0625 ms | 32.55 ns | 约1 μs | 更高更新频率 |
+TR 38.821 没有为 feeder-link switch 给出一套收敛的 PHY 过程，只建议在规范阶段继续讨论其影响。因此本篇只把馈电链路身份和公共时间参考作为联合状态输入，不把某种切换流程写成既定规范；透明/再生载荷及 Gateway 架构详见[系统架构与部署场景](./01_NTN系统架构与部署场景_学习笔记.md)。
+
+> **原文定位：**TR 38.821 Clauses 6.2.5、9.1。报告将 LEO 馈电链路切换对物理层过程的影响列为后续规范讨论项，未在研究阶段收敛具体机制。
+
+#### 1.2.4 TA、SCS 与跨时隙调整
+
+TR 38.811 以最大约 \(35\,\mu\mathrm{s/s}\) 的时延漂移评估 TA 更新。不同子载波间隔（Subcarrier Spacing，SCS）下，TA 量化步长和理论最大 TA step 不同；但报告同时指出，表中的最大 step 只在扩展 CP 下直接成立，正常 CP 场景的实际单次调整应受正常 CP 约束：
+
+| SCS | 时隙长度 | TA量化步长 | Table 7.3.2.2.2-1 理论最大 step | 正常 CP 代表长度 | 最大漂移下的命令量级 |
+|---:|---:|---:|---:|---:|---:|
+| 15 kHz | 1 ms | 520.83 ns | 约16.6 μs | 约4.688 μs | 约10次/s |
+| 30 kHz | 0.5 ms | 260.42 ns | 约8.3 μs | 约2.344 μs | 约15次/s（工程外推） |
+| 60 kHz | 0.25 ms | 130.21 ns | 约4.15 μs | 约1.172 μs | 约40次/s |
+| 120 kHz | 0.125 ms | 65.10 ns | 约2.1 μs | 约0.586 μs | 约80次/s |
+| 240 kHz | 0.0625 ms | 32.55 ns | 约1 μs | 约0.293 μs | 约120次/s（工程外推） |
+
+表中 15/60/120 kHz 的次数来自报告量级分析；30/240 kHz 只是按 \(35\,\mu\mathrm{s/s}\) 与代表性正常 CP 尺度做的工程外推，不是标准规定的发送周期。理论最大 step、CP 限制和命令更新率属于三个不同概念，不能把 16.6 μs 与“约 10 次/s”直接视为同一组条件。
 
 SCS 增大后 TA 时间粒度更细，但单次调整量变小；同一物理传播时延还对应更多 slot。因此更大 SCS 不能解决大 TA，UE 的发送时间必须允许跨 slot/TTI 边界整体移动，逻辑调度还需由 \(K_{\mathrm{offset}}\) 保证因果性。
 
-> **原文定位：**TR 38.811 Clause 7.3.2.2、Table 7.3.2.2.2-1。命令次数为报告在给定最大漂移下的量级分析，不是所有实现的固定发送周期。
+> **原文定位：**TR 38.811 Clause 7.3.2.2、Table 7.3.2.2.2-1 及其后关于 extended CP/normal CP 的说明。命令次数为报告在给定最大漂移下的量级分析，不是所有实现的固定发送周期。
 
 ### 1.3 残余多普勒、SCS 与 OFDM 正交性
 
@@ -322,13 +336,15 @@ T_{\mathrm{CP}}
 T_{\mathrm{timing,res}}.
 \]
 
-| SCS | 正常CP代表长度 |
+| SCS | 正常 CP 代表长度 |
 |---:|---:|
 | 15 kHz | 4.688 μs |
 | 30 kHz | 2.344 μs |
 | 60 kHz | 1.172 μs |
 | 120 kHz | 0.586 μs |
 | 240 kHz | 0.293 μs |
+
+这些数值按常用符号给出代表量级；正常 CP 并非每个 OFDM 符号都完全相同，slot 中首符号或周期性边界符号的 CP 会随 numerology 略长。判断 ISI 时应使用实际符号位置对应的 TS 38.211 参数，而不是把表中代表值当作所有符号的唯一 CP。
 
 TR 给出的 2 GHz 卫星信道时延扩展约为 180-250 ns，正常 CP 在参考场景下具有充足覆盖能力。15 kHz SCS 的有效符号长度为：
 
@@ -440,9 +456,9 @@ TR 引用的典型总损失为：
 
 即相同功放下有效输出功率可能只剩约 63%。报告给出的容量影响为 20%-40% 范围，具体取决于系统是功率受限还是带宽受限，不能把功率下降直接等同于固定容量下降。
 
-DFT-s-OFDM 的主要价值是较低 PAPR、较小回退和更高有效 EIRP，不表示其在相同 RE、调制阶数和编码率下天然具有较低频谱效率。TR 没有规定新的 NTN 下行波形，而是建议继续研究 CP-OFDM 的 PAPR 降低，并指出上行 DFT-s-OFDM 可能有利。
+DFT-s-OFDM 的主要价值是较低 PAPR、较小回退和更高有效 EIRP，不表示其在相同 RE、调制阶数和编码率下天然具有较低频谱效率。TR 38.811 在影响研究阶段讨论了 CP-OFDM 的 PAPR 降低并指出上行 DFT-s-OFDM 可能有利；随后 TR 38.821 的 RAN1 最终建议明确，至少对 Rel-17 不需要规定 NTN 专用的下行 PAPR 优化。该结论只限定规范化必要性，不表示卫星功放回退、带内失真或带外泄漏可以忽略。TR 38.821 的数据 LLS 基线也未纳入 HPA 非线性，不能把基线排除项反推成硬件无影响。
 
-> **原文定位：**TR 38.811 Clause 7.3.7.2、Figure 7.3.7.2.1-1。总损失示例来自报告引用的 ETSI TR 103 297。
+> **原文定位：**TR 38.811 Clause 7.3.7.2、Figure 7.3.7.2.1-1；TR 38.821 Clause 6.1.2、Table 6.1.2-4、Clause 9.1。总损失示例来自 TR 38.811 引用的 ETSI TR 103 297。
 
 ### 1.6 TDD 保护与双工选择
 
@@ -483,16 +499,16 @@ TA 不能消除这一保护时间，因为半双工 UE 不能在最后一个 DL 
 多数自适应机制可写成：
 
 \[
-\text{测量}
+\text{测量时刻 }t_{\mathrm{meas}}
 \rightarrow
-\text{滤波/预测}
+\text{报告时刻 }t_{\mathrm{report}}
 \rightarrow
-\text{反馈}
+\text{决策时刻 }t_{\mathrm{decision}}
 \rightarrow
-\text{决策}
-\rightarrow
-\text{执行}.
+\text{执行时刻 }t_{\mathrm{execute}}.
 \]
+
+滤波和预测可以位于测量、报告或决策侧，但判断信息是否过期时必须保留这四个时间戳。CSI 老化关注测量信道与数据执行信道的差异；TA/频率命令老化关注执行时的几何状态；HARQ 则必须等待某次传输的真实译码结果。它们共享长 RTT 背景，却不是同一种误差。
 
 反馈有效性的基本条件是：
 
@@ -516,6 +532,8 @@ T_{\mathrm{variation}},
 > **原文定位：**TR 38.811 Clauses 7.3.2.2-7.3.3.3。预测/滤波/闭环三层拆分属于基于报告条件的工程组织。
 
 ### 2.2 TA 与频率补偿的持续维护
+
+#### 2.2.1 几何预测与闭环残差
 
 对非地球静止轨道（Non-Geostationary Orbit，NGSO）卫星：
 
@@ -557,15 +575,20 @@ T_{\mathrm{TA}}(t)
 }
 \]
 
-几何预测器使用 UE 和卫星位置、速度与视线方向：
+几何预测器使用 UE 和卫星位置、速度与视线方向。令 \(\mathbf u_{\mathrm{UE}\rightarrow\mathrm{sat}}\) 为 UE 指向卫星的单位向量，并约定斜距增大为正，则：
 
 \[
+\dot d
+=
+\mathbf u_{\mathrm{UE}\rightarrow\mathrm{sat}}^{T}
+(\mathbf v_{\mathrm{sat}}-\mathbf v_{\mathrm{UE}}),
+\qquad
 \hat f_D
 =
-\frac{f_c}{c}
-(\mathbf v_{\mathrm{sat}}-\mathbf v_{\mathrm{UE}})^T
-\mathbf u_{\mathrm{LOS}}.
+-\frac{f_c}{c}\dot d.
 \]
+
+在该符号约定下，卫星远离 UE 时 \(\dot d>0\)、多普勒为负；若实现使用“卫星指向 UE”的 LOS 向量，公式符号必须相应翻转。该约定与第二篇的 \(f_D=-f_c\dot d/c\) 保持一致。
 
 同一组 \(\mathbf r_{\mathrm{sat}}(t)\)、\(\mathbf v_{\mathrm{sat}}(t)\) 同时产生斜距、传播时延、TA、斜距变化率和多普勒。网络测得的 UL 到达误差和残余 CFO 再修正位置误差、星历误差、网关群时延、晶振偏差和信息老化。
 
@@ -578,6 +601,29 @@ T_{\mathrm{TA}}(t)
 \]
 
 例如 \(\Delta D=100\,\mathrm{m}\) 时，\(\Delta T_{\mathrm{TA}}\approx0.67\,\mu\mathrm{s}\)。这一数值说明 GNSS 和星历可以提供粗对齐，但并不取消网络细化的必要性。
+
+#### 2.2.2 时间同步的候选路径
+
+TR 38.821 将上行定时维护归纳为两类研究方向。二者改变公共量和 UE 特定量的承担位置，但都需要处理估计误差和状态老化：
+
+| 路径 | 公共部分 | UE 特定部分 | 网络侧作用 |
+|---|---|---|---|
+| UE autonomous TA | UE 根据位置、星历和必要的馈电链路信息计算 Full TA 或服务链路 TA | UE 计算差分量并持续外推 | 网络根据 UL 到达误差细化残差 |
+| Network-indicated common TA | 网络按波束提供 Common TA | UE 使用 RAR/后续 TA 命令处理差分与剩余量 | 维护公共参考、扩展必要的 TA 范围并指示 timing drift |
+
+单个波束使用一个参考点可简化公共广播与差分计算；多个参考点可能缩小局部差分范围，但其选择和 UE 关联在报告中仍未收敛。负方向 TA 修正、RAR TA 范围扩展以及 timing drift rate 的具体表示也属于研究阶段问题，不能直接写成所有 NTN Release 的统一配置。
+
+#### 2.2.3 上行频率同步的候选路径
+
+上行频率维护同样存在 UE 预测与网络闭环两条路径：UE 可以根据下行参考信号、位置和星历估计上行多普勒并预补偿；网络也可以根据 PRACH 或其他上行信号估计残余频偏，再向 UE 指示修正值。工程系统可以组合使用两者，即几何预测去除可预测公共量，网络估计校正晶振、位置、星历和馈电链路残差。
+
+TR 38.821 认为可指示 UE 已补偿的频率值，但没有认为必须单独指示 Doppler drift rate。这里的“不需要漂移率指示”不表示漂移不存在，而是 UE 或网络可以通过周期更新、预测或频偏测量处理它。
+
+#### 2.2.4 位置或星历不可用时的退化维护
+
+位置与星历是 UE 自主预补偿的两个不同输入：只有卫星轨迹而不知道 UE 位置，不能唯一求出服务链路斜距和径向速度；只有 UE 位置而没有有效星历，也不能外推卫星状态。任一输入缺失或过期时，UE 可完成的几何预补偿都会下降，需要更多依赖网络广播的 Common TA、接收端时间/频率搜索和闭环修正。
+
+本节负责连接建立后的持续维护；首次接入时如何选择补偿路径、PRACH 需要覆盖多大的残余不确定性，由第 3.2 节继续展开。
 
 > **原文定位：**TR 38.811 Clause 7.3.2.2；TR 38.821 Clause 6.3.4。UE autonomous TA、network-indicated common TA 和 timing drift rate 均属于报告研究的候选框架，应与后续 TS 的规范机制分开表述。
 
@@ -615,11 +661,17 @@ n_{\mathrm{PDSCH}}
 
 纯下行 PDCCH→PDSCH 只在 DL timeline 上定义，不应无条件增加同类偏移。\(K_{\mathrm{offset}}\) 只保证调度动作发生在 UE 可执行的未来，不能缩短 ACK 的传播、网络处理和重传形成的 HARQ 闭环。
 
+不同过程所需的附加偏移不一定相同，偏移也可能按波束或按小区维护。TR 38.821 在研究阶段没有收敛它应由广播信息推导还是由高层信令给出，也保留了扩展 \(K_1/K_2\) 范围的讨论空间。因此这里用统一的 \(K_{\mathrm{offset}}\) 表示共同原理，而不是断言所有过程共用一个规范字段和值。
+
 > **原文定位：**TR 38.821 Clause 6.2.1、Figures 6.2.1-1 至 6.2.1-2；相关 NR 基线参见 TS 38.214 Clauses 5.2、6.1.2.1.1、6.2.1 和 TS 38.213 Clause 9。TR 中的偏移讨论属于研究方案，不能直接写成所有 Release 16 配置的既定参数。
 
 ### 2.4 HARQ、RLC 与缓存定时
 
-混合自动重传请求（Hybrid Automatic Repeat reQuest，HARQ）在 PHY/MAC 层使用 ACK/NACK、冗余版本和软合并快速修复误块。一个 HARQ 进程发送传输块后，在反馈返回前不能无条件复用同一进程状态。为保持流水，最小并行进程数可近似理解为：
+混合自动重传请求（Hybrid Automatic Repeat reQuest，HARQ）在 PHY/MAC 层使用反馈、冗余版本和软合并快速修复误块。NTN 的核心矛盾不是“能否重传”，而是一个 HARQ 进程从首次传输到可安全复用之间被长 RTT 占用。Release 17 因而从三个不同维度适配：增加进程数、允许按下行进程关闭反馈，以及为上行进程配置 Mode A/Mode B。三者不能混写成一个“关闭 HARQ”的开关。
+
+#### 2.4.1 进程占用与缓存压力
+
+若每个进程必须等待一次完整 HARQ 周期才可复用，为保持连续流水，最小并行进程数可近似理解为：
 
 \[
 N_{\mathrm{HARQ,min}}
@@ -638,7 +690,7 @@ TR 在 15 kHz SCS、1 ms 时隙的参考条件下给出：
 | MEO | 180 ms | 180 | 需研究TBS/MCS和实现能力 |
 | GEO/HEO | 600 ms | 600 | 简单线性扩展压力很大 |
 
-SCS 增大只会让同一 RTT 内包含更多时隙，不会缩短物理反馈时间。进程数扩展还会增加软缓存、并行编解码、冗余版本和调度上下文。仅用于理解的原始在途数据下界为：
+该表解释研究阶段为何不能只靠增加进程数；它不是 Release 17 的配置表。Release 17 将 PDSCH、PUSCH 可配置进程数扩展到 32，但 32 个进程仍不足以按“一时隙一个新传输块”的方式覆盖 MEO/GEO 的完整 RTT。SCS 增大只会让同一 RTT 内包含更多时隙，不会缩短物理反馈时间。进程数扩展还会增加软缓存、并行编解码、冗余版本和调度上下文。仅用于理解的原始在途数据下界为：
 
 \[
 B_{\mathrm{flight}}
@@ -648,14 +700,47 @@ R T_{\mathrm{ACK}}.
 
 若 \(R=100\,\mathrm{Mbit/s}\)、\(T_{\mathrm{ACK}}=0.6\,\mathrm{s}\)，原始在途数据约为 \(60\,\mathrm{Mbit}=7.5\,\mathrm{MB}\)。实际 HARQ 软缓存还与编码块、量化精度、多用户并发和冗余版本有关。
 
+#### 2.4.2 下行HARQ反馈启停
+
+下行方向由 gNB 发送 PDSCH，UE 在上行返回 HARQ-ACK。Release 17 的 `downlinkHARQ-FeedbackDisabled-r17` 是 32 bit 位图，按 HARQ process ID 决定是否关闭对应进程的下行 HARQ 反馈；它不是按整个 UE 只有一个总开关。反馈启用时，gNB 可以依据 ACK/NACK 决定是否发送增量冗余并保留软合并关系。反馈关闭时，同一 HARQ process ID 可以在一个 HARQ RTT 尚未结束前再次调度，从而避免进程停顿，但 gNB 不再拥有该次传输的即时 UE 译码结果。
+
+因此“反馈关闭”至少带来三个边界：
+
+- process ID 的提前复用不等于前一传输块已经正确接收；
+- 不能再假设每次重传都由对应 NACK 精确触发，可靠性需更多依靠编码、重复、调度策略和 RLC ARQ；
+- 半静态调度（Semi-Persistent Scheduling，SPS）使用哪些启用/关闭反馈的进程，由网络实现保证配置一致性。
+
+> **原文定位：**TS 38.300 Clause 16.14.2.1；TS 38.331 `PDSCH-ServingCellConfig` 与 `DownlinkHARQ-FeedbackDisabled-r17`（Clause 6.3.2）；TS 38.321 Clauses 5.3.2.2、5.7。下行反馈启停是 Release 17 规范机制，不再只是 TR 38.821 的候选方案。
+
+#### 2.4.3 上行HARQ Mode A与Mode B
+
+上行方向由 UE 发送 PUSCH，gNB 通过后续 DCI 的新数据指示（New Data Indicator，NDI）、冗余版本和资源分配控制新传或重传。Release 17 的 `uplinkHARQ-mode-r17` 同样是 32 bit 位图：bit=1 表示对应进程采用 HARQ Mode A，bit=0 表示 Mode B。该配置作用于上行 HARQ process ID，并不表示 UE 选择两种接收机模式。
+
+| 对比项 | HARQ Mode A | HARQ Mode B |
+|---|---|---|
+| 同一进程的复用边界 | 保留一个 HARQ RTT 的等待边界 | 允许在一个 HARQ RTT 尚未结束前再次调度 |
+| DRX中的重传等待 | 使用 `HARQ-RTT-TimerUL-NTN`，在基础 UL RTT timer 上加入最新可用 UE-gNB RTT | 使用基线 `drx-HARQ-RTT-TimerUL`，不增加 NTN RTT 等待 |
+| 主要价值 | 保持“等待上次结果后再期待重传授权”的清晰时序 | 避免长 RTT 导致同一进程长期停顿，提高调度自由度 |
+| 主要代价 | 需要更多并行进程和缓存，否则容易停顿 | 早期复用时网络必须避免混淆新传、重传和软缓存状态 |
+
+Mode A 的 MAC 行为可以概括为：PUSCH 发送后，UE 启动带 NTN RTT 的等待定时器；定时器到期后才进入期待 UL 重传授权的窗口。Mode B 允许网络更早调度同一 process ID，但“允许提前调度”并不自动等于盲重传，也不等于关闭所有上行可靠性机制；具体是新传还是重传仍由 DCI、NDI、冗余版本和网络调度状态共同决定。
+
+对配置授权（Configured Grant，CG），规范把进程选择与 HARQ mode 关联；网络实现应保证供某一 CG 使用的进程具有合适且一致的 Mode A/Mode B 配置。若 `nrofHARQ-ProcessesForPUSCH-r17` 未配置为 32，UE 使用 16 个 PUSCH HARQ 进程；Mode A/B 位图中未配置进程对应的 bit 被忽略。
+
+> **原文定位：**TS 38.300 Clause 16.14.2.1；TS 38.331 `PUSCH-ServingCellConfig` 与 `UplinkHARQ-mode-r17`（Clause 6.3.2）；TS 38.321 Clauses 5.4.3.1、5.7。TS 38.300 明确 Mode B 允许在一次 HARQ RTT 结束前再次调度同一进程。
+
+#### 2.4.4 RLC兜底与研究到规范边界
+
 | 机制 | 层次 | 接收端处理 | 长RTT下主要压力 |
 |---|---|---|---|
 | HARQ | PHY/MAC | 软合并和传输块反馈 | 进程数、软缓存、ACK/NACK关联 |
 | RLC ARQ | RLC确认模式 | 状态报告和PDU重传 | 窗口、定时器、状态报告和缓存 |
 
-限制或关闭部分 HARQ 反馈并不表示误块消失，而是将更多剩余错误交给 RLC ARQ、更强编码或应用容错。RLC 的恢复需要跨越更长的状态报告和重传闭环，因此不能认为它能够无代价替代 HARQ。
+限制或关闭部分 HARQ 反馈并不表示误块消失，而是将更多剩余错误交给 RLC ARQ、更强编码、重复或应用容错。RLC 的恢复需要跨越更长的状态报告和重传闭环，因此不能认为它能够无代价替代 HARQ。
 
-> **原文定位：**TR 38.811 Clauses 7.3.3.1-7.3.3.2，Figures 7.3.3.1-1、7.3.3.1.1-1，Table 7.3.3.1.1-1。表中进程数是研究评估参考，不是所有 NTN 系统的强制配置。
+TR 38.821 研究阶段给出了“增加进程/缓存”和“限制或关闭反馈并更多依靠 RLC”两条总体路线，还记录了 DCI 指示、UCI disruption report、超过 8 slot 的聚合、时间交织聚合和新 MCS 表等候选。后续 Release 17 规范最终形成了 32 个 HARQ 进程、下行按进程启停反馈和上行按进程配置 Mode A/B 等机制；这不意味着 TR 中列出的所有候选都被采纳。阅读时应把“TR 候选全集”和“TS 已落地子集”分开。
+
+> **原文定位：**TR 38.811 Clauses 7.3.3.1-7.3.3.2，Figures 7.3.3.1-1、7.3.3.1.1-1，Table 7.3.3.1.1-1；TR 38.821 Clauses 6.4.1-6.4.2、9.1；TS 38.300 Clause 16.14.2.1。TR 表中的参考进程需求是研究评估；Release 17 规范机制应以 TS 38.300、TS 38.321 和 TS 38.331 为准。
 
 ### 2.5 CSI/CQI、预测与 MCS
 
@@ -667,6 +752,12 @@ R T_{\mathrm{ACK}}.
 | GEO S | 遮挡和局部多径可能较快 | 难以逐衰落跟踪，需要更大裕量 |
 | LEO | 斜距引起的大尺度损耗可预测 | 可预测和跟踪大尺度变化，仍难跟踪快速多径 |
 | 手持终端 | 姿态、阴影和局部遮挡 | 需要预测、滤波和保守MCS |
+
+TR 38.821 的链路级结果说明，CSI aging 不是只由反馈时延决定。在 3 km/h、10 dB SNR 的参考评估中，NTN-TDL-C（LOS）把反馈时延从约 6 ms 增加到 40-46 ms 时，吞吐量或频谱效率损失约为 10%-12%；NTN-TDL-A（NLOS）的对应损失约为 28%-38%。另一个评估在 30 km/h 条件下没有观察到反馈时延从 6 ms 增加到 201 ms 的明显额外损失。不同信道、速度和实现得出的趋势并不单调一致，因此不能仅按 RTT 给 CSI 固定扣减。
+
+报告评估的长期信道平均在 3 km/h、理想信道估计条件下没有改善吞吐量；预测式 CSI 在部分 NLOS 评估中约有 10% 增益，但预测可以仅作为实现算法还是需要新增 UE 报告参数没有共识。由此，Rel-15 CSI 框架至少可作为 LOS NTN 链路自适应基线，进一步优化仍未收敛。
+
+> **原文定位：**TR 38.821 Clause 6.2.3。百分比是特定 NTN-TDL、SNR、速度和反馈时延下的来源结果，不是通用 NTN 性能保证。
 
 工程实现可使用：
 
@@ -702,7 +793,7 @@ M_{\mathrm{loop\ uncertainty}}.
 
 该分解不是 TR 或 TS 直接定义的协议参数。3GPP 规定 MCS 索引与调制阶数、目标码率及相应信令；下行 PDSCH 和通常的上行 PUSCH MCS 由 gNB 调度器选择，具体预测器、CQI 到 MCS 映射、滞回、外环链路自适应和 NTN 裕量属于实现算法。
 
-> **原文定位：**TR 38.811 Clause 7.3.3.3；MCS 和链路自适应基线参见 TS 38.214 Clauses 5.1.3、5.2.2 和 6.1.4。TR 要求进一步研究闭环裕量，没有规定上述工程分解的固定数值。
+> **原文定位：**TR 38.811 Clause 7.3.3.3；TR 38.821 Clause 6.2.3；MCS 和链路自适应基线参见 TS 38.214 Clauses 5.1.3、5.2.2 和 6.1.4。TR 没有规定上述工程分解的固定数值。
 
 ### 2.6 RSRP 滤波与上行功率控制
 
@@ -762,32 +853,181 @@ TR 38.821 讨论过多个 Layer 3 滤波系数、按波束配置功控参数、�
 
 > **原文定位：**TR 38.821 Clause 6.2.2；TS 38.213 Clause 7.1.1；TS 38.331 Clause 5.5.3.2。
 
-## 3 初始接入、同步与状态迁移
+## 3 下行同步、系统信息与随机接入
 
-本章按“NTN 影响集中程度”先讨论 RACH，再讨论 SSB，不代表实际空口时序中 RACH 早于 SSB。RACH 小节先把下行同步和系统信息提供的时间、频率及辅助信息视为输入；SSB 小节随后解释这些输入的获得边界。
-
-### 3.1 NTN 随机接入与初始 TA
-
-随机接入把上游的传播时延、差分时延、残余载波频率偏移（Carrier Frequency Offset，CFO）和时间参考具体化为 Msg1 检测、Msg2 监测、Msg3 调度和上行对齐问题。其核心不是把一个 TA 字段无限扩大，而是重组初始时延预测、网络细化和跨 DL-UL 调度。
-
-从实现角度，应把随机接入看成两条同时收敛的估计链：
+本章按照 UE 建立接入认知和执行过程的先后关系组织：UE 首先接收同步信号块（Synchronization Signal Block，SSB），使用其中的主同步信号（Primary Synchronization Signal，PSS）和辅同步信号（Secondary Synchronization Signal，SSS）取得初始时频基准与物理小区标识，再解调物理广播信道（Physical Broadcast Channel，PBCH）并读取后续系统信息；获得 PRACH 资源及可用 NTN 辅助信息后，UE 才发送 Msg1 并进入随机接入。
 
 \[
-\begin{aligned}
-\text{时间链：}&\quad
-\text{Common TA}
-+\text{Differential TA}
-+\text{Residual correction},\\
-\text{频率链：}&\quad
-\text{公共多普勒补偿}
-+\text{UE-specific 多普勒补偿}
-+\text{Residual CFO estimation}.
-\end{aligned}
+\text{PSS/SSS捕获}
+\rightarrow
+\text{PBCH与系统信息}
+\rightarrow
+\text{辅助能力与补偿路径}
+\rightarrow
+\text{PRACH}
+\rightarrow
+\text{RAR/Msg3}.
 \]
 
-只有两条链都进入 PRACH 接收机的捕获范围，相关峰、RO 标签和后续 Msg3 时间线才同时可信。
+PSS/SSS并不是在 SSB 之前单独发送的另一组信号；上述顺序表示 UE 对同一个 SSB 的处理层次，以及 SSB 输出如何成为 RACH 输入。
 
-#### 3.1.1 四步随机接入与初始 TA
+### 3.1 PSS/SSS、SSB与下行初始同步
+
+同步信号块（Synchronization Signal Block，SSB）由主同步信号（Primary Synchronization Signal，PSS）、辅同步信号（Secondary Synchronization Signal，SSS）、物理广播信道（Physical Broadcast Channel，PBCH）及 PBCH 解调参考信号组成。它不是单纯的“同步序列”，而是把盲捕获逐步转换成系统信息读取入口。
+
+#### 3.1.1 SSB内部处理链
+
+UE 对同一个 SSB 的处理可以分成四层：
+
+| 组成 | UE主要处理 | 稳定输出 |
+|---|---|---|
+| PSS | 候选时间位置、粗频偏和 \(N_{ID}^{(2)}\) 检测 | 粗符号边界与小区标识的一部分 |
+| SSS | 细化时间/频率并检测 \(N_{ID}^{(1)}\) | 完整物理小区标识 PCI |
+| PBCH DM-RS | PBCH信道估计和候选SSB假设校验 | PBCH相干解调条件 |
+| PBCH/MIB | 译码系统帧号部分信息、公共SCS、`pdcch-ConfigSIB1`等 | 获取SIB1的CORESET#0/SearchSpace#0入口 |
+
+PSS/SSS 完成的是“找到并识别这个 SSB”；PBCH/MIB 完成的是“从这个 SSB 进入小区广播配置”。因此，PSS/SSS 不在 SSB 之前独立存在，MIB 也不直接携带全部随机接入和 NTN 辅助参数。
+
+> **原文定位：**TS 38.211 Clauses 7.3.3、7.4.2-7.4.3；TS 38.331 `MIB` 信息元素及 Clause 5.2.2.4.1。
+
+#### 3.1.2 SSB多普勒公共预补偿与残余搜索
+
+TR 使用地面 UE 约 5 ppm 初始频偏鲁棒性作为比较基线：
+
+\[
+5\,\mathrm{ppm}\times2\,\mathrm{GHz}
+=10\,\mathrm{kHz},
+\qquad
+5\,\mathrm{ppm}\times20\,\mathrm{GHz}
+=100\,\mathrm{kHz}.
+\]
+
+600 km LEO 的参考最大原始多普勒在 2 GHz 和 20 GHz 分别约为 ±48 kHz 和 ±480 kHz。若 UE 在完全未知频偏下直接搜索 PSS/SSS，地面 NR 的单次捕获范围可能不足。但一个 SSB 面向整个波束广播，网络不能为每个 UE 分别生成不同频移，只能围绕波束中心或上行时间同步参考点执行公共频率预补偿。
+
+设网络针对参考点 \(r\) 给下行 SSB 施加频率预移 \(f_{\mathrm{pre}}^{\mathrm{DL}}\approx-\hat f_{D,r}^{\mathrm{DL}}\)，UE \(x\) 看到的同步残余可写成：
+
+\[
+\delta f_{\mathrm{SSB},x}
+=
+f_{D,x}^{\mathrm{DL}}
+-\hat f_{D,r}^{\mathrm{DL}}
++e_{\mathrm{feeder}}
++e_{\mathrm{osc}},
+\]
+
+其中第一、二项之差是 UE 相对参考点的差分服务链路多普勒，\(e_{\mathrm{feeder}}\) 汇总馈电链路和转发器频率误差残差，\(e_{\mathrm{osc}}\) 表示 UE 晶振误差。UE 的 PSS/SSS 搜索器只需要覆盖这一残余，而不是完整原始卫星多普勒。
+
+因此 SSB 多普勒处理有两个不同阶段：首次捕获前，网络侧尽可能去除公共量，UE 搜索残余；捕获后，UE 可利用 PSS/SSS、PBCH DM-RS 和后续参考信号继续跟踪频偏。SIB19 中的星历尚未获得，不能倒过来用于第一次 SSB 捕获。TR 38.821 的评估观察到：GEO 以及采用波束级公共频移预补偿的 LEO 可以复用 Rel-15 SSB；LEO 若不做公共预补偿，需要增加 UE 搜索复杂度，但未识别出修改 SSB 波形本身的必要性。
+
+> **原文定位：**TR 38.811 Clause 7.3.2.3；TR 38.821 Clause 6.3.2。报告中约 13,000 km 的高度判断来自特定 5 ppm 与最大几何多普勒比较，不是通用部署门限。
+
+#### 3.1.3 SSB时延公共处理与下行时间基准
+
+传播时延对 SSB 的影响与多普勒不同。一个公共时延只会把整个 SSB 和后续下行帧整体向后平移；UE 仍可以在到达时刻检测 PSS/SSS，并把该到达位置建立为本地 DL 时间基准。真正困难的是不同 UE、不同波束和 DL/UL 参考点之间的时间关系，而不是 SSB 内部四个符号被同一个公共时延“拉长”。
+
+若网络希望下行帧在参考点 \(r\) 对齐，工程上等价于将包含 SSB 的整个下行波形提前 \(\hat\tau_r\) 发出。UE \(x\) 的接收时间残余为：
+
+\[
+\delta\tau_{\mathrm{SSB},x}
+=
+\tau_x-\hat\tau_r.
+\]
+
+这里的 \(\hat\tau_r\) 是网络侧公共时延处理，\(\tau_x-\hat\tau_r\) 是 UE 相对参考点的差分时延。它不是一个写进 PSS、SSS 或 PBCH 的“SSB TA 字段”，也没有消除真实传播时延。Release 17 规定 DL 与 UL 在上行时间同步参考点按 \(N_{\mathrm{TA,offset}}\) 对齐；Common TA、\(K_{\mathrm{offset}}\) 和 \(K_{\mathrm{mac}}\) 随后分别处理公共 RTT、跨 DL-UL 调度关系和 gNB 侧 DL/UL 帧不对齐。
+
+从 UE 视角看，首次 SSB 只给出“信号何时到达我这里”；在获得 SIB19 的 Common TA、星历和 epoch time 后，UE 才能把这个接收基准转换成相对于上行时间同步参考点的发射提前量。由此必须区分：
+
+\[
+\boxed{
+\text{SSB到达时间捕获}
+\neq
+\text{网络侧公共DL时间处理}
+\neq
+\text{UE上行TA预补偿}.
+}
+\]
+
+> **原文定位：**TS 38.300 Clauses 16.14.2.1-16.14.2.2；TR 38.821 Clauses 6.2.1、6.3.2。把参考点对齐理解为整个 DL 波形的公共提前发送是工程等效解释，不是新增的 SSB 专用信令。
+
+#### 3.1.4 PBCH、SIB1与SIB19获取链
+
+SSB 后的系统信息链为：
+
+\[
+\text{PBCH/MIB}
+\rightarrow
+\text{CORESET\#0与SearchSpace\#0}
+\rightarrow
+\text{SIB1}
+\rightarrow
+\text{SIB19调度}
+\rightarrow
+\text{NTN辅助信息}.
+\]
+
+MIB 提供 UE 读取 SIB1 所需的基础入口。NTN-capable UE 读取 SIB1 后，根据 `cellBarredNTN-r17` 判断该小区是否允许 NTN 接入；该字段 absent 或为 `barred` 时，UE 不应把该小区作为可接入 NTN 小区。SIB1 的 SI scheduling information 再给出其他 SI message 的周期、窗口和 SIB 映射。SIB19 被调度时，对应 `si-BroadcastStatus` 设为 `broadcasting`，因此它属于 SSB 之后的 RRC 系统信息，不属于 PBCH payload。
+
+SIB19 的职责是承载卫星接入辅助信息。它的主要内容及消费者如下：
+
+| SIB19字段或子字段 | 物理/协议含义 | 主要消费者 |
+|---|---|---|
+| `ephemerisInfo-r17` | 卫星位置速度状态向量或轨道参数 | 服务链路时延、多普勒与邻区测量预测 |
+| `epochTime-r17` | 星历与Common TA参数的共同参考时刻 | 把广播参数外推到当前时刻 |
+| `ta-Common-r17` | 网络控制的公共TA，可含网络认为必要的时间偏移 | UE到上行同步参考点的总TA计算 |
+| `ta-CommonDrift-r17`、`ta-CommonDriftVariant-r17` | Common TA的一阶漂移及漂移变化 | 在两次广播之间外推公共TA |
+| `ntn-UlSyncValidityDuration-r17` | 星历和Common TA辅助信息从epoch time起的有效期 | 有效性判断与SIB19重获取 |
+| `cellSpecificKoffset-r17` | NTN修改时序关系使用的调度偏移 | PUSCH、HARQ-ACK、CSI等跨DL-UL调度 |
+| `kmac-r17` | gNB侧DL/UL帧未对齐时的附加偏移 | MAC CE生效、RAR/MsgB窗口和RTT估计 |
+| `ta-Report-r17` | 是否启用随机接入/连接态TA报告 | 网络侧TA维护 |
+| `ntn-PolarizationDL/UL-r17` | 服务链路上下行极化指示 | UE射频/天线极化选择 |
+| `t-Service-r17` | 准地球固定小区停止服务当前区域的时间 | 时间条件测量与移动性 |
+| `referenceLocation-r17`、`distanceThresh-r17` | 服务小区参考位置与距离门限 | Idle/Inactive位置条件测量 |
+| `ntn-NeighCellConfigList-r17` | 邻区频点、PCI及其NTN辅助配置 | NTN邻区测量和切换准备 |
+
+`epochTime` 不是普通的“消息接收时间”：它把星历和 Common TA 参数绑定到一个 SFN/subframe 参考点。`ntn-UlSyncValidityDuration` 也不是 SIB19 的广播周期，而是 UE 可以继续使用该组辅助信息的最长时间。RRC_CONNECTED UE 收到 SIB19 后，从 epoch time 指示的 subframe 启动或重启 T430，并应在有效期结束前重获取 SIB19。星历、epoch time、Common TA 与有效期必须作为一组消费，不能只缓存星历坐标而忽略其时间标签。
+
+Release 17 的接入假设比 TR 38.821 的候选讨论更明确：NTN UE 需要有效 GNSS 位置、有效星历和 Common TA；UE 根据这些量计算 UE 到上行时间同步参考点的 RTT，并对上行 TA 以及服务链路瞬时多普勒自主预补偿。馈电链路多普勒和转发器频率误差由网络实现处理。若上述必要量失效，UE 不应继续发射，直至重新获得有效信息。
+
+> **原文定位：**TS 38.331 Clauses 5.2.2.3、5.2.2.4.1-5.2.2.4.2、5.2.2.4.21，`SIB1`、`SIB19-r17`、`NTN-Config-r17` 与 `SI-SchedulingInfo`（Clause 6.3.2）；TS 38.300 Clauses 16.14.2.2、16.14.3.1、16.14.3.3。
+
+#### 3.1.5 同步输出与后续消费者
+
+SSB-RSRP 可进入波束测量、Layer 3 滤波和路径损耗估计。其消费者分属不同笔记和章节：波束候选与小区组织由[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)负责；RSRP 滤波和 PUSCH 功控由第 2.6 节负责；SIB19 提供的星历和 Common TA 与 SSB-to-RO 关联共同进入第 3.2 节随机接入。
+
+因此从首次 SSB 到 NTN 接入准备完成的稳定输出为：
+
+\[
+\boxed{
+\text{下行时频基准}
++
+\text{小区/SSB身份}
++
+\text{SIB1调度入口}
++
+\text{有效NTN辅助状态}.
+}
+\]
+
+### 3.2 NTN随机接入与初始时频对齐
+
+随机接入把上游的传播时延、差分时延、残余 CFO 和时间参考具体化为 Msg1 检测、Msg2 监测、Msg3 调度和上行对齐问题。其核心不是把一个 TA 字段无限扩大，而是重组初始时延预测、网络细化和跨 DL-UL 调度。
+
+#### 3.2.1 辅助能力与补偿路径
+
+UE 能否在 Msg1 之前完成几何时频预补偿，取决于“UE 位置”和“卫星星历”两类信息是否同时可用且足够新鲜，并需要 SIB19 提供的 Common TA、epoch time 和有效期共同建立上行同步状态。为理解 TR 38.821 研究过的辅助条件，可以先区分四种输入状态：
+
+| UE位置 | 卫星星历 | Msg1前可用处理 | PRACH侧剩余压力 |
+|---|---|---|---|
+| 可用 | 可用 | UE可预测服务链路 TA 和上行多普勒，并结合网络公共量预补偿 | 主要覆盖位置、星历、晶振及馈电链路残差 |
+| 可用 | 不可用或过期 | 不能可靠外推卫星距离与径向速度 | 需要网络提供更多公共量并扩大时频搜索 |
+| 不可用 | 可用 | 知道轨道但不能唯一确定 UE 到卫星的斜距和径向速度 | Common TA只能去除公共部分，仍需覆盖 UE 特定差异 |
+| 不可用 | 不可用 | 无法执行完整几何预补偿 | 主要依赖网络广播、接收端搜索及后续闭环修正 |
+
+该表是研究问题的机制分类，不是 Release 17 定义的四种 UE 工作模式。信息“存在”也不等于“有效”：位置误差、星历误差、epoch time、Common TA 和信息老化必须共同决定预补偿残差。对于 Release 17 规范化 NR NTN 接入，UE 是 GNSS-capable，并应在有效 GNSS 位置、星历和 Common TA 可用后才发射；因此表中后三行用于理解研究阶段的退化压力和接收机需求，不能解读为 Release 17 UE 可以在这些状态下继续发送 Msg1。连接后的持续维护由第 2.2 节负责。
+
+> **原文定位：**TR 38.821 Clauses 6.3.2-6.3.3；TS 38.300 Clauses 16.14.1、16.14.2.2；TS 38.331 `SIB19-r17` 与 `NTN-Config-r17`（Clause 6.3.2）。
+
+#### 3.2.2 四步随机接入与初始TA
 
 传统四步随机接入为：
 
@@ -810,16 +1050,7 @@ TR 38.821 讨论过多个 Layer 3 滤波系数、按波束配置功控参数、�
 | 有位置与星历能力 | UE 根据位置、星历及必要的网关信息自主计算 Full TA 或服务链路 TA | 修正 UE 估计的 residual error |
 | 无位置能力 | 网络广播相对参考点的 Common TA 或时间偏移 | 给出 UE-specific differential/residual TA |
 
-四步过程中的 UE 与网络知识状态并不相同：
-
-| 阶段 | UE 已知或应用的量 | 网络从接收中可知的量 | 尚未闭合的问题 |
-|---|---|---|---|
-| Msg1 前 | 下行时频基准、广播辅助量、自主估计的 TA/CFO | 波束/小区级公共参考 | UE 估计误差尚未知 |
-| Msg1 到达 | UE 已按自身估计提前发送 | 前导、到达误差、残余 CFO、候选 RO | 到达误差不等于 UE 已应用的绝对 TA |
-| Msg2/RAR | 接收 TA correction 与 UL grant | 可通知检测结果和细化量 | Msg3 调度仍可能缺少 UE 绝对 UL timeline |
-| Msg3 到达 | 已应用粗 TA 与 RAR correction | 可联合 Msg3 信息建立更完整 TA 状态 | 转入后续 TA/CFO 维护 |
-
-UE 自主计算服务链路几何时：
+UE 自主计算时：
 
 \[
 \hat D_x(t)
@@ -835,39 +1066,7 @@ UE 自主计算服务链路几何时：
 \frac{2\hat D_x(t)}{c}.
 \]
 
-这里 GNSS 只给出 UE 的位置和时间基准，并不会直接“输出 TA”。UE 还需要卫星星历、参考时刻以及透明转发场景所需的网关位置或馈电链路时延。对同一波束参考点 \(r\) 和 UE \(u\)，可写为：
-
-\[
-\tau_u(t)
-=
-\tau_r(t)
-+
-\Delta\tau_{\mathrm{geo},u}(t),
-\]
-
-\[
-e_{\tau,u}
-=
-\left[
-\tau_u-\tau_r
--
-\widehat{\Delta\tau}_{\mathrm{geo},u}
-\right]
-+b_t,
-\]
-
-其中 \(b_t\) 汇总 UE 时钟、星历时效、位置误差、公共参考误差和未建模馈电时延。频率侧有对应分解：
-
-\[
-\delta f_u
-=
-\left(f_{D,u}-f_{D,r}\right)
--
-\widehat{\Delta f}_{D,u}
-+b_f.
-\]
-
-Common TA 是同一波束/小区内相对参考点共享的传播分量，不是“整条卫星 RTT 的另一个名字”。对再生载荷，可把参考点至卫星的分量作为公共参考；对透明载荷，还要明确馈电链路由 UE 估计、网络广播还是网络侧补偿。RAR 中的 TA 因而更接近残余细化量：
+RAR 中的 TA 更接近细化量：
 
 \[
 \Delta T_{\mathrm{TA}}
@@ -879,70 +1078,9 @@ T_{\mathrm{TA,true}}
 
 由于 UE 可能低估或高估初始 TA，细化量在物理上可能向两个方向修正。
 
-> **工程判断：**GNSS 失效并不只会造成“TA 变差”。它会同时放大 PRACH 接收窗、残余 CFO 搜索范围和跟踪环初始误差；若网络仍广播 Common TA，UE 可以退化为“公共分量 + 网络细化”，但可支持的波束尺寸、RO 密度和接入时延需要重新核算。
-
 > **原文定位：**TR 38.811 Clauses 7.3.4.1-7.3.4.2；TR 38.821 Clauses 6.3.4、7.2.1.1.1.2，Figures 7.2.1.1.1.2-8 至 7.2.1.1.1.2-9。38.811 识别原机制范围问题，38.821 研究 Common TA、UE autonomous TA 和 network refinement；两者的标准状态不同。
 
-#### 3.1.2 PRACH 序列、相关检测与保护区
-
-NR PRACH 前导基于 Zadoff-Chu（ZC）根序列及其循环移位构造。为突出 NTN 中的物理含义，可用简化形式表示根序列：
-
-\[
-x_u[n]
-=
-\exp\!\left(
--j\frac{\pi u n(n+1)}{N_{\mathrm{ZC}}}
-\right),
-\qquad 0\le n<N_{\mathrm{ZC}},
-\]
-
-同一根 \(u\) 上第 \(v\) 个前导可写为：
-
-\[
-x_{u,v}[n]
-=
-x_u\!\left[
-(n+C_v)\bmod N_{\mathrm{ZC}}
-\right],
-\qquad
-C_v=vN_{\mathrm{CS}},
-\]
-
-其中 \(N_{\mathrm{CS}}\) 表示 ZC 序列索引域中的循环移位间隔，并不是采样率、CP 长度或 TA 步长。配置较大的 \(N_{\mathrm{CS}}\) 会扩大零相关区，但同一根可生成的可用前导数相应下降；若所需前导数量超过单根可提供的数量，就需要继续使用其他根序列。
-
-在存在到达时延 \(n_\tau\) 和归一化 CFO \(\epsilon\) 时，接收序列可写为：
-
-\[
-r[n]
-=
-\alpha x_{u,v}[n-n_\tau]
-\exp\!\left(j\frac{2\pi\epsilon n}{N_{\mathrm{ZC}}}\right)
-+w[n].
-\]
-
-接收机对候选根、循环移位、时延和频偏进行联合或分级搜索，例如：
-
-\[
-R_{u,v}[m]
-=
-\left|
-\sum_n r[n]x_{u,v}^{*}[n-m]
-\right|^2.
-\]
-
-理想零 CFO 下，循环移位把不同前导的相关峰分隔开；残余 CFO 会使相关能量泄漏、峰值降低或出现根相关的错误候选。于是 NTN PRACH 检测至少有三种不同的失败模式：
-
-| 失败模式 | 物理原因 | 典型后果 | 主要控制量 |
-|---|---|---|---|
-| 循环移位混淆 | 到达时延越过零相关区或落入另一前导的移位区域 | preamble index 误判 | \(N_{\mathrm{CS}}\)、restricted set、残余时延 |
-| 频偏引起的相关失真 | 残余 CFO 破坏理想 ZC 相关特性 | 峰值损失、假峰、检测率下降 | 预补偿、频偏搜索、SCS、重复 |
-| RO 标签混淆 | 相邻 RO 的接收窗口在绝对时间上重叠 | 同一前导无法唯一关联发送 RO | RO 间隔、前导分组、显式时频标签 |
-
-受限集合（restricted set）从循环移位集合中选择对高速或多普勒条件更稳健的组合，它处理的是“同一根上的序列可分辨性”；它不会自动消除公共绝对时延，也不会替代 RO 标签设计。类似地，CP 保护的是一个 PRACH 格式内部的时间不确定性和多径扩展，RAR TA 调整的是后续上行发射时刻，二者都不能单独证明 RO 归属。
-
-> **标准状态：**TR 38.821 Clause 6.3.3 在“UE 不做时频预补偿”的假设下研究了更大 SCS、重复、多 ZC 根、Gold/m 序列和附加 scrambling 等候选；报告要求在规范阶段继续筛选，不能把这些候选全部写成现网必选特性。ZC 生成、根序列和 restricted set 的规范定义见 TS 38.211 Clause 6.3.3.1。
-
-#### 3.1.3 PRACH 接收窗口与 RO 模糊
+#### 3.2.3 PRACH检测窗口与RO模糊
 
 对同一波束内第 \(i\) 个 UE：
 
@@ -962,16 +1100,11 @@ R_{u,v}[m]
 | RAR监测窗口 | UE何时等待Msg2 | 上下行传播、处理调度和剩余不确定性 |
 | RAR中的TA | 如何把到达误差通知UE | TA范围、粒度和公共参考 |
 
-若所有 UE 使用同一个 RACH Occasion（RO），网络接收窗至少需要覆盖最早与最晚到达者。TR 38.821 使用往返对齐关系描述时，接收窗跨度与小区内最大单程差分时延的两倍相关：
+若所有 UE 使用同一个 RACH Occasion（RO），接收窗口至少需要覆盖：
 
 \[
-W_{\mathrm{rx}}
-\gtrsim
-2(\tau_{\max}-\tau_{\min})
-+W_{\mathrm{res}},
+[\tau_{\min},\tau_{\max}].
 \]
-
-其中 \(W_{\mathrm{res}}\) 包含预补偿残差、接收机搜索余量和实现裕量。
 
 当差分范围大于相邻 RO 间隔时：
 
@@ -994,17 +1127,6 @@ gNB 检测到 Zadoff-Chu 前导后可能无法确定它属于哪个发送 RO，�
 
 因此 beam footprint 不只是覆盖参数，它还通过差分距离约束 PRACH 搜索范围、RO 间隔和前导检测复杂度。
 
-TR 38.821 给出的研究解法揭示了几种互不等价的资源权衡：
-
-| 方法 | 如何增加 RO 可识别性 | 代价或边界 |
-|---|---|---|
-| 拉大相邻 RO 时间间隔 | 接收窗不再重叠 | 降低单位时间接入机会数 |
-| 给邻近 RO 分配不同前导组 | 用 preamble group 携带 RO 标签 | 每个 RO 的有效前导数下降 |
-| 在不同频带发送/跳频 | 用接收频带辅助判断 RO | 需要显式配置与接收机支持；研究候选并非自动能力 |
-| MsgA 携带 SFN/时间辅助 | 数据部分显式说明发送时刻 | 依赖两步接入且 MsgA PUSCH 需先可解调 |
-
-“频域复用多个 RO”与“一个前导做频率跳变”也要分开：前者直接增加接入机会数，后者提供多个频率观察或标签。跳频可能帮助区分 CFO、时延或相邻 RO，但不会凭空增加 ZC 正交签名数，也不能在没有映射规则时自动消除歧义。
-
 TR 以 200 km 小区半径评估差分距离：
 
 | 最低仰角 | 参考差分距离 |
@@ -1019,7 +1141,22 @@ TR 以 200 km 小区半径评估差分距离：
 
 > **原文定位：**TR 38.811 Clause 7.3.4.1.1、Figure 7.3.4.1.1-1、Table 7.3.4.1.2-1；TR 38.821 Clause 7.2.1.1.1.2、Figures 7.2.1.1.1.2-1 至 7.2.1.1.1.2-2、Table 7.2.1.1.1.2-1。
 
-#### 3.1.4 RAR 监测与 Msg3 调度
+#### 3.2.4 无预补偿时的PRACH候选
+
+TR 38.821 Clause 6.3.3 根据 UE 是否完成时频预补偿给出不同判断。UE 具有足够准确的位置和星历、能够在 Msg1 前预补偿时间与频率偏移的情况下，Rel-15 PRACH 格式和序列可以复用，是否通过重复或更大 SCS 改善覆盖可留到规范阶段讨论。若 UE 不进行预补偿，报告记录了四类增强候选：
+
+| 候选 | 序列或波形方向 | 主要意图 | 研究状态 |
+|---|---|---|---|
+| 单个 Zadoff-Chu 序列 | 更大 SCS 和/或重复，CP 与 \(N_{\mathrm{CS}}\) 待确定 | 提高大频偏和低 SNR 下的检测能力 | 候选，未收敛 |
+| 多个 Zadoff-Chu 序列 | 使用不同 root 的多根 ZC | 增加时频不确定性下的可观测结构 | 候选，未收敛 |
+| Gold/m-sequence | 配合处理或变换预编码 | 改变大时频偏移下的相关与估计特性 | 候选，未收敛 |
+| ZC加scrambling | 在 ZC 上增加扰码结构 | 改善检测或模糊区分能力 | 候选，未收敛 |
+
+38.821 没有完成这些候选的 down-selection，也没有把其中任一种写成 NTN 统一 PRACH。因此本节只保留候选族及其问题背景；不同序列、root、循环移位、重复和接收机算法的波形级比较应在后续 RAN1 提案专题或[链路、系统与多星仿真](./06_NTN链路系统与多星仿真_学习笔记.md)中展开。
+
+> **原文定位：**TR 38.821 Clause 6.3.3、Clause 9.1。RAN1 后续工作的焦点是 UE 不做时频预补偿时的 PRACH 序列和/或格式增强，报告本身没有完成候选选择。
+
+#### 3.2.5 RAR监测与Msg3调度
 
 从 UE 发送 Msg1 到接收 Msg2 的时间为：
 
@@ -1068,59 +1205,9 @@ n_{\mathrm{RAR}}
 
 其中 \(\Delta\) 表示首次 Msg3 PUSCH 的附加处理时间。
 
-把知识状态写成估计量更直观。若 UE 实际应用的初始 TA 为 \(T_{\mathrm{app}}\)，网络从 Msg1 相关峰只直接观测到到达误差 \(e_{\mathrm{arr}}\)：
-
-\[
-e_{\mathrm{arr}}
-=
-T_{\mathrm{true}}
--T_{\mathrm{app}}
-+e_{\mathrm{det}}.
-\]
-
-网络可在 RAR 中发送 \(e_{\mathrm{arr}}\) 的量化修正，却不能仅凭该差值唯一反推出 \(T_{\mathrm{app}}\)。直到 UE 显式报告或 Msg3 让网络建立完整时间状态之前，Msg3 grant 需要保守覆盖剩余不确定性。这也是“RAR TA 可修正 Msg1 到达”与“网络知道 UE 绝对 TA”不可等同的原因。
-
 > **原文定位：**TR 38.811 Clause 7.3.4.1.2；TR 38.821 Clauses 6.2.1、7.2.1.1.1.2，Figures 7.2.1.1.1.2-3、7.2.1.1.1.2-9。RAR window start、绝对 TA 知识和 Msg3 调度应分别核算。
 
-#### 3.1.5 RACH 容量、碰撞与 SSB 分区
-
-若每秒有 \(N_t\) 个时域 RO、每个时刻配置 \(N_f\) 个频域 RO，并且每个 RO 对某类 UE 实际可用的 contention-based 前导数为 \(M_{\mathrm{eff}}\)，则简化签名空间为：
-
-\[
-N_{\mathrm{opp}}=N_tN_f,
-\qquad
-S=N_{\mathrm{opp}}M_{\mathrm{eff}}.
-\]
-
-当 \(U\) 个 UE 独立、均匀选择这 \(S\) 个资源签名时，某个 UE 至少与另一个 UE 碰撞的概率为：
-
-\[
-P_{\mathrm{col}}
-=
-1-\left(1-\frac{1}{S}\right)^{U-1},
-\]
-
-单轮期望成功数近似为：
-
-\[
-\mathbb E[N_{\mathrm{succ}}]
-=
-U\left(1-\frac{1}{S}\right)^{U-1}.
-\]
-
-这里 \(M_{\mathrm{eff}}\) 通常小于“协议上最多 64 个前导”的口头值，因为还要扣除无竞争接入、SI request、不同 SSB 的前导分区、restricted set/root 设计及接收机可可靠区分的候选。多使用根序列可以凑足配置前导，不意味着在接收机处理预算、RO 数量都不变时容量必然等比例增长。
-
-TS 38.331 的 `ssb-perRACH-OccasionAndCB-PreamblesPerSSB` 同时配置每个 RO 关联的 SSB 数，以及每个 SSB 的 contention-based preamble 数。其容量含义是：
-
-- 一个 SSB 可映射到多个 RO：给该波束更多接入机会，但消耗更多时频资源；
-- 多个 SSB 共享一个 RO：节省 RO，但需要按 SSB 切分前导，且热点波束更容易碰撞；
-- 总有效容量必须同时看 RO 密度、频域复用、每 SSB 前导数和 RO 歧义保护，不能只看单个字段。
-
-例如，将 RO 时间间隔拉大以消除 NTN 差分时延歧义，会直接降低 \(N_t\)；再把一个 RO 分给多个 SSB，又会降低每个 SSB 的 \(M_{\mathrm{eff}}\)。这解释了为什么大波束、无 GNSS 接入和高并发三者不能无代价兼得。
-
-> **原文定位：**TR 38.821 Clauses 7.2.1.1.1.1-7.2.1.1.1.2；TS 38.331 RACH-ConfigCommon 的 totalNumberOfRA-Preambles、restrictedSetConfig 与 ssb-perRACH-OccasionAndCB-PreamblesPerSSB 字段。上式是便于设计核算的均匀选择近似，不代替 3GPP 的具体业务到达模型。
-
-#### 3.1.6 TA 范围与波束尺寸
+#### 3.2.6 TA范围与波束尺寸
 
 TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 
@@ -1144,7 +1231,7 @@ TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 
 > **原文定位：**TR 38.811 Clauses 7.3.4.2.1-7.3.4.2.3，Tables 7.3.4.2.1-1、7.3.4.2.2-1。表格是研究评估参考，后续版本 NTN TA 的规范机制应以对应 TS 为准。
 
-#### 3.1.7 两步随机接入的时间信息
+#### 3.2.7 两步随机接入的时间信息
 
 两步随机接入把前导与上行数据合并为：
 
@@ -1156,251 +1243,44 @@ TR 38.811 给出的参考最大链路距离随 SCS 增大而缩小：
 \text{PUSCH payload}.
 \]
 
-网络随后在 MsgB 中完成响应和竞争解决。从 TA 角度，MsgA 的 PUSCH payload 允许 UE 在更早阶段报告已应用的初始 TA 或相关辅助信息，使网络更早建立对 UE 绝对 UL 时间基准的认知，减少四步随机接入中“Msg1 已对齐但网络仍不知道 UE 已应用多少 TA”的调度不确定性。
+从 TA 角度，它允许 UE 在更早阶段向网络报告已应用的初始 TA 或相关辅助信息，使网络更早建立对 UE 绝对 UL 时间基准的认知，减少四步随机接入中“Msg1 已对齐但网络仍不知道 UE 已应用多少 TA”的调度不确定性。
 
-但 MsgA 中的 PUSCH 比纯前导更依赖可用的初始时间和频率补偿：若 UE 的预补偿误差已经使 PUSCH 超出 CP、DM-RS 或接收机频偏容限，网络就无法读取“我应用了多少 TA”这条辅助信息。因此两步随机接入不会消除 MsgA 的传播时间，也不会自动解决残余 CFO、PRACH 窗口和竞争冲突；它减少消息往返并提前交换时间状态，却对 MsgA 前的初始同步质量提出更直接要求。
-
-| 比较项 | 四步随机接入 | 两步随机接入 |
-|---|---|---|
-| 首次上行 | Msg1：PRACH 前导 | MsgA：PRACH + PUSCH |
-| 网络首次获得 UE 数据 | Msg3 | MsgA |
-| 已应用 TA 的报告时机 | Msg3 或后续状态建立 | 可在 MsgA PUSCH 中提前报告 |
-| 初始预补偿要求 | PRACH 必须可检测 | PRACH 可检测且 PUSCH 可解调 |
-| NTN 主要收益 | 基线流程成熟 | 减少往返并降低 Msg3 调度未知量 |
-
-该内容属于 TR 38.821 对 NTN 随机接入候选方案的研究，不应写成所有 NTN UE 必须使用两步随机接入。
+两步随机接入不会消除 MsgA 的传播时间，也不会自动解决残余 CFO、PRACH 窗口和竞争冲突；其价值主要在于更早交换时间状态。该内容属于 TR 38.821 对 NTN 随机接入候选方案的研究，不应写成所有 NTN UE 必须使用两步随机接入。
 
 > **原文定位：**TR 38.821 Clause 7.2.1.1.2、Figures 7.2.1.1.2-1 至 7.2.1.1.2-2；相关 TA 框架见 Clause 6.3.4。具体两步随机接入字段和规范行为应以相应 TS 版本为准。
 
-### 3.2 SSB 与下行初始同步
+### 3.3 空口联合状态与下游接口
 
-同步信号块（Synchronization Signal Block，SSB）包含主同步信号（Primary Synchronization Signal，PSS）、辅同步信号（Secondary Synchronization Signal，SSS）和物理广播信道（Physical Broadcast Channel，PBCH）。UE 通过 PSS/SSS 完成初始时频同步和物理小区标识检测，再解调 PBCH 获得主信息块及继续读取系统信息所需的基础配置。
-
-#### 3.2.1 PSS、SSS、PBCH 与 SSB index
-
-一次 SSB 候选检测不是单一相关操作，而是一条逐步缩小假设空间的链：
-
-| 组成 | 主要任务 | 典型输出 | 不能单独提供 |
-|---|---|---|---|
-| PSS | 粗符号定时、粗频偏、\(N_{\mathrm{ID}}^{(2)}\) | 3 个扇区内身份候选之一 | 完整 PCI、系统信息 |
-| SSS | 帧内同步细化、\(N_{\mathrm{ID}}^{(1)}\) | 与 PSS 合成 PCI | 星历、Common TA |
-| PBCH DM-RS | PBCH 信道估计、细同步与 SSB index 相关判决 | PBCH 解调条件、SSB 候选识别 | 完整 NTN 接入配置 |
-| PBCH/MIB | 最小系统信息与 SIB1 入口 | 帧结构基础量、CORESET#0/SearchSpace#0 入口 | 全部 PRACH/NTN 辅助参数 |
-
-物理小区标识由 PSS/SSS 的两部分组成：
-
-\[
-N_{\mathrm{ID}}^{\mathrm{cell}}
-=
-3N_{\mathrm{ID}}^{(1)}
-+N_{\mathrm{ID}}^{(2)}.
-\]
-
-SSB index 与 PCI 不是同一变量。一个 PCI 下可以有多个 SSB index，对应不同发送时刻和实现相关的波束方向；多个 SSB/波束可以共享同一 PCI。UE 检出 PCI 后仍需借助 PBCH DM-RS、PBCH 信息和配置确定候选 SSB 及其后续接入资源。
-
-#### 3.2.2 原始多普勒、二维搜索与同步捕获
-
-TR 使用地面 UE 约 5 ppm 初始频偏鲁棒性作为比较基线：
-
-\[
-5\,\mathrm{ppm}\times2\,\mathrm{GHz}
-=10\,\mathrm{kHz},
-\]
-
-\[
-5\,\mathrm{ppm}\times20\,\mathrm{GHz}
-=100\,\mathrm{kHz}.
-\]
-
-600 km LEO 的参考最大原始多普勒在 2 GHz 和 20 GHz 分别约为 ±48 kHz 和 ±480 kHz，均高于对应数值。如果 UE 在完全未知多普勒条件下直接搜索 PSS/SSS，地面 NR 的单次捕获范围可能不足。
-
-对一个候选同步序列 \(s[n]\)，接收机实际进行的是时间—频率二维搜索：
-
-\[
-C(\hat\tau,\hat f)
-=
-\left|
-\sum_n
-r[n]s^*[n-\hat\tau]
-e^{-j2\pi\hat f nT_s}
-\right|^2.
-\]
-
-搜索范围越大，候选栅格、计算量、虚警控制和捕获时间越高。NTN 的关键不是只提高某个相关器门限，而是先用几何与网络补偿缩小 \((\hat\tau,\hat f)\) 的先验范围。
-
-但同步判据应使用预补偿后的残余量：
-
-\[
-\delta f_{\mathrm{sync}}
-=
-f_D
--
-\hat f_{D,\mathrm{common}}
--
-\hat f_{D,\mathrm{UE}}.
-\]
-
-波束中心公共预补偿、UE 位置、卫星星历和后续频偏估计都可以缩小搜索范围。因此大原始多普勒不必然要求修改同步信号；只有残余范围仍超出捕获能力时，才需要扩大搜索、增加辅助信息或研究同步增强。TR 38.821 的评估进一步观察到：GEO 以及采用波束级公共频移预补偿的 LEO 可以复用 Rel-15 SSB；LEO 若不做频移预补偿，UE 接收机需要增加搜索复杂度，但报告仍未识别出修改 SSB 波形的必要性。
-
-完整捕获链可整理为：
-
-\[
-\begin{aligned}
-\text{raw satellite Doppler}
-&\rightarrow
-\text{network/beam common pre-compensation}\\
-&\rightarrow
-\text{UE GNSS/ephemeris prediction}
-\rightarrow
-\text{PSS coarse CFO}\\
-&\rightarrow
-\text{SSS/PBCH DM-RS fine tracking}
-\rightarrow
-\text{PRACH residual CFO}.
-\end{aligned}
-\]
-
-SSB 同步与 Msg1 发送之间还存在信息老化。若两者相隔 \(T_{\mathrm{age}}\)，一阶近似为：
-
-\[
-\delta f_{\mathrm{Msg1}}
-\approx
-\delta f_{\mathrm{sync}}
-+\dot f_D T_{\mathrm{age}}
-+b_f,
-\]
-
-\[
-e_{\tau,\mathrm{Msg1}}
-\approx
-e_{\tau,\mathrm{sync}}
-+\dot\tau T_{\mathrm{age}}
-+b_t.
-\]
-
-所以“SSB 已捕获”并不等于“PRACH 一定在窗内”。实现仍要考虑 SIB1 读取时间、RO 等待时间、卫星运动和本振漂移，并在 Msg1 前更新 TA/CFO 预测。
-
-> **原文定位：**TR 38.811 Clause 7.3.2.3；TR 38.821 Clause 6.3.2。报告中约 13,000 km 的高度判断来自特定 5 ppm 与最大几何多普勒比较，不是通用部署门限。
-
-#### 3.2.3 波束扫描、SSB 选择与 SSB-to-RO 映射
-
-在波束扫描部署中，一个 SSB burst set 可在不同 SSB index 上发送多个候选波束。UE 对可检测 SSB 测量 SSB-RSRP，并根据门限与选择规则确定候选 SSB；网络再通过 SSB-to-RO 映射把该选择带入随机接入。
-
-TS 38.331 的 RACH-ConfigCommon 同时提供 rsrp-ThresholdSSB 和 ssb-perRACH-OccasionAndCB-PreamblesPerSSB。后一个字段包含两个维度：
-
-1. 一个 RO 对应多少个 SSB，或一个 SSB 分散到多少个 RO；
-2. 每个 SSB 分配多少个 contention-based preamble。
-
-因此 gNB 可以从“在哪个 RO、检测到哪个前导集合”反推出 UE 选择的 SSB/候选波束，而不必在 Msg1 中显式发送完整波束编号。该映射也形成资源—碰撞权衡：
-
-| 映射方式 | 波束识别 | 资源效率 | 碰撞/热点影响 |
-|---|---|---|---|
-| 一个 SSB 对多个 RO | 识别直接 | 占用更多 RO | 单波束机会增加 |
-| 一个 SSB 对一个 RO | 关系简单 | 中等 | 取决于每 SSB 前导数 |
-| 多个 SSB 共享一个 RO | 依靠前导分区识别 | 节省 RO | 每 SSB 可用前导减少，热点更敏感 |
-
-NTN 中还要叠加第 3.1.3 节的 RO 接收窗重叠问题。即使 SSB-to-RO 配置在逻辑上唯一，若长差分时延使相邻 RO 在网络侧不可分，物理到达仍会破坏该映射。因此 SSB/RO 配置、波束足迹和 Common/Differential TA 需要联合设计。
-
-> **跨笔记边界：**SSB 波束扫描方式、卫星波束与 PCI/小区组织由[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)展开；本节只保留 SSB 选择进入 PRACH 资源映射的接口。
-
-#### 3.2.4 SSB、PBCH 与系统信息边界
-
-SSB 的物理层任务是提供同步、物理小区标识、SSB index 相关信息和 PBCH 解调入口。星历、Common TA、timing drift rate 或其他 NTN 辅助量是否以及如何通过系统信息提供，属于更高层配置问题，不能笼统写成“SSB 本身携带全部 NTN 辅助信息”。
-
-从 RACH 的输入角度，UE 在发送 Msg1 前可能需要：
-
-| 输入 | 作用 | 获得层面 |
-|---|---|---|
-| 下行符号与帧时间 | 建立接收时间基准 | PSS/SSS/PBCH |
-| PCI | 识别物理小区 | PSS/SSS |
-| SSB index 与 PBCH 解调条件 | 识别候选 SSB/波束并读取 MIB | PBCH DM-RS、PBCH |
-| 粗频偏估计 | 缩小残余 CFO | PSS/SSS及接收机估计 |
-| SIB1 读取入口 | 获取初始接入所需配置 | PBCH/MIB 指向 CORESET#0/SearchSpace#0 |
-| PRACH资源关联 | 选择RO和前导资源 | SIB1/RRC中的RACH与SSB-to-RO配置 |
-| 星历、Common TA或漂移辅助 | Msg1前TA/多普勒预补偿 | NTN系统信息或其他配置，取决于标准版本 |
-| UE位置与本地时间 | 形成几何预测输入 | UE GNSS/其他定位能力，不属于 SSB |
-
-这一分层避免把同步信号、广播信道和 RRC 系统信息混成同一对象。
-
-#### 3.2.5 从 SSB 到 Msg1 的状态传递与失败定位
-
-SSB 到 RACH 的物理顺序可压缩为：
-
-\[
-\begin{aligned}
-\text{PSS/SSS detection}
-&\rightarrow
-\text{PCI + coarse time/frequency}
-\rightarrow
-\text{PBCH/MIB}\\
-&\rightarrow
-\text{SIB1/RACH configuration}
-\rightarrow
-\text{SSB/RO/preamble selection}\\
-&\rightarrow
-\text{TA/CFO prediction update}
-\rightarrow
-\text{Msg1}.
-\end{aligned}
-\]
-
-用失败现象反推环节时，可按下表排查：
-
-| 现象 | 优先怀疑 | 不应直接归因于 |
-|---|---|---|
-| PSS 峰始终不稳定 | 原始/残余 CFO 超范围、搜索栅格、低 SNR | PRACH TA 命令 |
-| PCI 可得但 PBCH 失败 | 精频偏、信道估计、SSB index 假设 | SSB-to-RO 碰撞 |
-| SIB1 可读但 Msg1 无检测 | TA/CFO 老化、PRACH 功率、RO 选择、前导检测 | “SSB 波形必然要改” |
-| Msg1 有峰但 RO 不确定 | 差分时延造成接收窗重叠 | 单纯扩大 CP |
-| Msg2 可收但 Msg3 调度困难 | 网络缺少 UE 已应用的绝对 TA | PSS/SSS PCI 检测 |
-
-#### 3.2.6 测量与后续消费者
-
-SSB-RSRP 可进入波束测量、Layer 3 滤波和路径损耗估计。其消费者分属不同笔记和章节：波束候选与小区组织由[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)负责；RSRP 滤波和 PUSCH 功控由第 2.6 节负责；SSB-to-RO 关联、粗频偏和时间参考则进入第 3.1 节的随机接入。
-
-因此 SSB 在本篇的稳定输出为：
-
-\[
-\boxed{
-\text{下行时间基准}
-+
-\text{粗频率基准}
-+
-\text{小区/SSB身份}
-+
-\text{接入配置入口}.
-}
-\]
-
-### 3.3 服务状态迁移与仿真接口
-
-完整的波束足迹、逻辑小区、PCI、BWP 和波束管理流程由第三份笔记拥有。本篇只描述服务波束或卫星变化时需要共同迁移的空口状态：
+完整的波束足迹、逻辑小区、PCI、BWP、极化资源和波束管理流程由第三份笔记拥有。本篇只描述同步、接入和控制过程需要消费哪些联合空口状态：
 
 \[
 \mathbf s_{\mathrm{air}}
 =
 [
+\mathrm{Cell},
 \mathrm{Beam},
 \mathrm{Satellite},
 \mathrm{ReferencePoint},
 T_{\mathrm{TA}},
 f_D,
-K_{\mathrm{offset}}
+K_{\mathrm{offset}},
+\mathrm{BWP},
+\mathrm{Polarization},
+\mathrm{FeederLink}
 ].
 \]
 
-切换并不只是选择新的最大 RSRP 波束。不同服务状态可能对应新的 TA 参考点、公共多普勒预补偿、频率资源、SSB/CSI-RS 配置和逻辑时序偏移。几何预测可提前给出候选卫星、预计切换时刻和参考量；反馈老化决定测量报告到达时是否仍然有效；协议过程负责在目标状态生效前保持调度因果性。
+这些状态不必同时改变。service-link switch 可以更换服务卫星或物理波束而保持逻辑小区，也可能连同参考点、Common TA、公共多普勒预补偿、SSB/CSI-RS 和 BWP 一起更新；feeder-link switch 即使不改变 UE 侧覆盖，也可能改变公共时延、频率参考和透明转发路径。切换不能简化成“选择新的最大 RSRP 波束”，还要保证目标状态生效时的时频连续性和调度因果性。
 
-向[链路、系统与多星仿真](./06_NTN链路系统与多星仿真_学习笔记.md)输出的状态为：
+TR 38.821 以 Rel-15/16 波束管理和 BWP 操作为 NTN 基线，但频率复用条件下“一波束一 BWP”“一波束一 CC”及 DL/UL BWP 联动等候选没有收敛。报告还认为在部分 NTN 场景中指示 RHCP/LHCP 极化模式可能有益，但是否支持信令仍留待规范阶段讨论。因此本篇只记录 BWP 和极化变化会影响同步、资源与接入状态；具体空间/频率组织详见[天线波束与覆盖组织](./03_NTN天线波束与覆盖组织_学习笔记.md)。
 
-| 状态 | 更新依据 | 仿真处理 |
-|---|---|---|
-| Common/Differential/Residual TA | 几何、参考点、预补偿与测量 | PRACH到达窗口和上行对齐 |
-| \(K_{\mathrm{offset}}\) | 时间架构、配置与过程触发 | 调度、反馈和参考资源时间轴 |
-| 原始/公共/残余多普勒 | 星历、位置、估计与补偿时效 | 捕获范围、残差模型和BLER映射 |
-| CSI/CQI/MCS状态 | 参考信号、反馈RTT与调度器 | 信息老化、预测和链路自适应 |
-| RSRP/功控状态 | 测量、L3滤波和功控命令 | 发射功率和功率受限事件 |
-| HARQ/RLC/队列状态 | ACK/NACK、定时器和缓存 | 进程占用、重传与时延统计 |
-| Beam/Satellite/Reference Point | 几何预测与服务状态机 | 多速率切换和联合状态迁移 |
+> **原文定位：**TR 38.821 Clauses 6.2.4-6.2.5、9.1。波束/BWP映射、极化模式信令和 feeder-link switch PHY影响均属于基线之上的后续讨论项，不是报告已收敛的统一方案。
 
-系统级抽象不能把 RTT、CSI 老化、TA 残差和 HARQ 进程占用统一写成固定 SINR 扣减。它们分别作用于物理到达时间、决策信息、接收机残差和队列状态；只有明确映射假设并使用链路级结果校准后，才可把其中一部分折算为等效性能损失。
+向[链路、系统与多星仿真](./06_NTN链路系统与多星仿真_学习笔记.md)输出时，应将物理到达时间、决策信息、接收机残差、反馈和队列状态分别建模，不能统一折算成固定 SINR 扣减：
+
+| 状态组 | 下游仿真处理 |
+|---|---|
+| 时频对齐：Common/Differential/Residual TA、\(K_{\mathrm{offset}}\)、原始/公共/残余多普勒 | PRACH到达窗口、上行对齐、捕获范围、调度和残差映射 |
+| 反馈控制：CSI/CQI/MCS、RSRP/功控、HARQ/RLC/队列 | 信息老化、链路自适应、发射功率、进程占用和时延统计 |
+| 接入辅助：UE位置、星历、Common TA、系统信息、PRACH/HARQ反馈模式 | 选择预补偿或退化搜索路径、检测模型和反馈事件队列 |
+| 服务资源：Beam/Satellite/Reference Point、BWP/Polarization/Feeder Link | 多速率状态迁移、资源、链路预算及公共时频状态更新 |
